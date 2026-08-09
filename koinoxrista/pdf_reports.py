@@ -34,6 +34,10 @@ def _font_paths():
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         ),
+        (
+            Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf"),
+        ),
     ]
     for regular, bold in candidates:
         if regular and regular.is_file():

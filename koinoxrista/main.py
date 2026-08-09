@@ -8,6 +8,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -19,6 +20,16 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
+from .database_maintenance import (
+    DatabaseMaintenanceError,
+    application_database_path,
+    create_backup,
+    delete_local_backup,
+    list_backups,
+    local_backup_path,
+    restore_database,
+    save_restore_upload,
+)
 from .extensions import db
 from .legacy import import_legacy
 from .models import (
@@ -710,6 +721,174 @@ def user_building_access_delete(user_id, building_id):
         db.session.commit()
         flash(f"Η πρόσβαση στο «{building.name}» αφαιρέθηκε.", "success")
     return redirect(url_for("main.admin_users"))
+
+
+@main.get("/admin/database")
+@login_required
+@system_admin_required
+def admin_database():
+    database_path = application_database_path()
+    stats = {
+        "file_name": database_path.name,
+        "size_mb": database_path.stat().st_size / (1024 * 1024),
+        "users": db.session.scalar(db.select(db.func.count(User.id))),
+        "buildings": db.session.scalar(db.select(db.func.count(Building.id))),
+        "periods": db.session.scalar(db.select(db.func.count(Period.id))),
+        "expenses": db.session.scalar(db.select(db.func.count(Expense.id))),
+    }
+    return render_template(
+        "admin/database.html",
+        stats=stats,
+        backups=list_backups(),
+        max_restore_mb=current_app.config["MAX_RESTORE_BYTES"] // (1024 * 1024),
+    )
+
+
+@main.post("/admin/database/backup")
+@login_required
+@system_admin_required
+def admin_database_backup():
+    try:
+        audit("database_backup_requested", current_user.id)
+        db.session.commit()
+        backup_path = create_backup()
+        response = send_file(
+            backup_path,
+            mimetype="application/vnd.sqlite3",
+            as_attachment=True,
+            download_name=backup_path.name,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        if request.headers.get("HX-Request") == "true":
+            response.close()
+            redirect_response = current_app.response_class("", status=200)
+            redirect_response.headers["HX-Redirect"] = url_for(
+                "main.admin_database_backup_download", filename=backup_path.name
+            )
+            return redirect_response
+        return response
+    except DatabaseMaintenanceError as exc:
+        flash(f"Το backup απέτυχε: {exc}", "error")
+        return redirect(url_for("main.admin_database"))
+
+
+@main.post("/admin/database/backup/prepare")
+@login_required
+@system_admin_required
+def admin_database_backup_prepare():
+    try:
+        audit("database_backup_requested", current_user.id)
+        db.session.commit()
+        backup_path = create_backup()
+        return jsonify(
+            filename=backup_path.name,
+            download_url=url_for("main.admin_database_backup_download", filename=backup_path.name),
+        )
+    except DatabaseMaintenanceError as exc:
+        return jsonify(error=f"Το backup απέτυχε: {exc}"), 400
+
+
+@main.get("/admin/database/backups/fragment")
+@login_required
+@system_admin_required
+def admin_database_backups_fragment():
+    response = current_app.response_class(
+        render_template("admin/_backup_history.html", backups=list_backups())
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@main.get("/admin/database/backups/<filename>")
+@login_required
+@system_admin_required
+def admin_database_backup_download(filename):
+    try:
+        backup_path = local_backup_path(filename)
+    except DatabaseMaintenanceError:
+        abort(404)
+    response = send_file(
+        backup_path,
+        mimetype="application/vnd.sqlite3",
+        as_attachment=True,
+        download_name=backup_path.name,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@main.post("/admin/database/backups/<filename>/delete")
+@login_required
+@system_admin_required
+def admin_database_backup_delete(filename):
+    try:
+        deleted_name = delete_local_backup(filename)
+        audit("database_backup_deleted", current_user.id, details=deleted_name)
+        db.session.commit()
+        message = f"Το backup «{deleted_name}» διαγράφηκε."
+        if request.headers.get("HX-Request") == "true":
+            return render_template(
+                "admin/_backup_history.html",
+                backups=list_backups(),
+                backup_message=message,
+            )
+        flash(message, "success")
+    except DatabaseMaintenanceError as exc:
+        message = f"Η διαγραφή απέτυχε: {exc}"
+        if request.headers.get("HX-Request") == "true":
+            return render_template(
+                "admin/_backup_history.html",
+                backups=list_backups(),
+                backup_error=message,
+            )
+        flash(message, "error")
+    return redirect(url_for("main.admin_database"))
+
+
+@main.post("/admin/database/restore")
+@login_required
+@system_admin_required
+def admin_database_restore():
+    password = request.form.get("password", "")
+    confirmation = request.form.get("confirmation", "").strip()
+    uploaded = request.files.get("database_file")
+    if not current_user.check_password(password):
+        flash("Ο κωδικός του admin δεν είναι σωστός.", "error")
+        return redirect(url_for("main.admin_database"))
+    if confirmation != "RESTORE":
+        flash("Πληκτρολογήστε RESTORE για επιβεβαίωση.", "error")
+        return redirect(url_for("main.admin_database"))
+    if not uploaded or not uploaded.filename:
+        flash("Επιλέξτε αρχείο SQLite backup.", "error")
+        return redirect(url_for("main.admin_database"))
+
+    admin_email = current_user.email
+    try:
+        upload_path = save_restore_upload(uploaded, current_app.config["MAX_RESTORE_BYTES"])
+        audit("database_restore_requested", current_user.id, details=uploaded.filename)
+        db.session.commit()
+        pre_restore = restore_database(upload_path)
+        restored_admin = db.session.scalar(
+            db.select(User).where(
+                User.email == admin_email,
+                User.is_system_admin.is_(True),
+            )
+        ) or db.session.scalar(
+            db.select(User).where(User.is_system_admin.is_(True)).order_by(User.id)
+        )
+        audit(
+            "database_restored",
+            restored_admin.id if restored_admin else None,
+            details=f"Pre-restore backup: {pre_restore.name}",
+        )
+        db.session.commit()
+    except DatabaseMaintenanceError as exc:
+        flash(f"Το restore απέτυχε: {exc}", "error")
+        return redirect(url_for("main.admin_database"))
+
+    session.clear()
+    flash("Η βάση επαναφέρθηκε επιτυχώς. Συνδεθείτε ξανά.", "success")
+    return redirect(url_for("auth.login"))
 
 
 @main.post("/admin/users/<int:user_id>/reset")

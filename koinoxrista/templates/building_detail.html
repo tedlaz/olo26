@@ -33,9 +33,24 @@
 <div class="two-col">
   <section class="card"><div class="section-head"><h2>Διαμερίσματα</h2></div>
     <ul class="clean-list">{% for item in building.apartments|sort(attribute='number') %}<li><div><strong>{{ item.display_label() }}</strong><span>{{ item.floor }}ος όροφος · {{ item.square_meters }} m²</span></div>{% if role in ('editor', 'building_admin') %}<a href="{{ url_for('main.apartment_edit', apartment_id=item.id) }}">Διόρθωση</a>{% endif %}</li>{% else %}<li>Δεν υπάρχουν διαμερίσματα.</li>{% endfor %}</ul>
-    {% if role in ('editor', 'building_admin') %}<form method="post" action="{{ url_for('main.apartment_add', building_id=building.id) }}" class="compact-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="name" placeholder="Ονομασία" required><input type="number" name="number" placeholder="Αριθμός" required><input type="number" name="floor" placeholder="Όροφος" value="0" required><input type="number" step="0.01" name="square_meters" placeholder="m²" required><input name="owner" placeholder="Ιδιοκτήτης"><input name="occupant" placeholder="Ένοικος"><button>Προσθήκη</button>
-    </form>{% endif %}
+    {% if role in ('editor', 'building_admin') %}
+    <div class="add-apartment-panel">
+      <div class="add-apartment-heading">
+        <span class="add-apartment-icon" aria-hidden="true">+</span>
+        <div><h3>Νέο διαμέρισμα</h3><p>Συμπλήρωσε τα βασικά στοιχεία. Ιδιοκτήτης και ένοικος μπορούν να προστεθούν και αργότερα.</p></div>
+      </div>
+      <form method="post" action="{{ url_for('main.apartment_add', building_id=building.id) }}" class="apartment-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Αριθμός διαμερίσματος<input type="number" name="number" placeholder="π.χ. 6" required></label>
+        <label>Ονομασία<input name="name" placeholder="π.χ. Διαμέρισμα 6" required></label>
+        <label>Όροφος<input type="number" name="floor" placeholder="π.χ. 2" value="0" required></label>
+        <label>Τετραγωνικά μέτρα<input type="number" step="0.01" min="0" name="square_meters" placeholder="π.χ. 85,50" required></label>
+        <label>Ιδιοκτήτης <span class="optional-label">Προαιρετικό</span><input name="owner" placeholder="Ονοματεπώνυμο ιδιοκτήτη"></label>
+        <label>Ένοικος <span class="optional-label">Προαιρετικό</span><input name="occupant" placeholder="Ονοματεπώνυμο ενοίκου"></label>
+        <div class="apartment-form-action"><button>Προσθήκη διαμερίσματος</button></div>
+      </form>
+    </div>
+    {% endif %}
   </section>
   <section class="card"><div class="section-head"><h2>Κατηγορίες</h2>{% if role in ('editor', 'building_admin') %}<a href="{{ url_for('main.category_add', building_id=building.id) }}">Νέα</a>{% endif %}</div>
     <ul class="clean-list">{% for item in building.categories %}<li><strong>{{ item.name }}</strong></li>{% else %}<li>Δεν υπάρχουν κατηγορίες.</li>{% endfor %}</ul>

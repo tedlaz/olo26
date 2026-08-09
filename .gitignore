@@ -4,3 +4,6 @@ __pycache__/
 .ruff_cache/
 *.pyc
 *.db
+.env
+secrets/*
+!secrets/.gitkeep

@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from sqlalchemy import inspect, text
@@ -18,7 +19,10 @@ def _backup_sqlite_database(label):
     backup_path = source_path.with_name(f"{source_path.stem}.{label}.db")
     if backup_path.exists():
         return backup_path
-    with sqlite3.connect(source_path) as source, sqlite3.connect(backup_path) as backup:
+    with (
+        closing(sqlite3.connect(source_path)) as source,
+        closing(sqlite3.connect(backup_path)) as backup,
+    ):
         source.backup(backup)
     return backup_path
 

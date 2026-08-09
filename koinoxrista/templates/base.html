@@ -3,21 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b2633">
   <title>{% block title %}Κοινόχρηστα{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=2) }}">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="{{ url_for('static', filename='app.js', v=1) }}" defer></script>
 </head>
 <body hx-boost="true">
   <header class="topbar">
-    <a class="brand" href="{{ url_for('main.dashboard') }}">ΚΟΙΝΟΧΡΗΣΤΑ</a>
+    <a class="brand" href="{{ url_for('main.dashboard') }}" aria-label="Κοινόχρηστα - αρχική">
+      <span class="brand-mark" aria-hidden="true">Κ</span>
+      <span class="brand-word">ΚΟΙΝΟΧΡΗΣΤΑ</span>
+    </a>
     {% if current_user.is_authenticated %}
       <nav>
-        <a href="{{ url_for('main.dashboard') }}">Κτίρια</a>
-        {% if current_user.is_system_admin %}<a href="{{ url_for('main.admin_users') }}">Χρήστες</a>{% endif %}
-        <span>{{ current_user.display_name }}</span>
+        <a class="nav-link{% if request.endpoint not in ('main.admin_users', 'main.admin_database') %} active{% endif %}" href="{{ url_for('main.dashboard') }}">Κτίρια</a>
+        {% if current_user.is_system_admin %}<a class="nav-link{% if request.endpoint == 'main.admin_users' %} active{% endif %}" href="{{ url_for('main.admin_users') }}">Χρήστες</a>{% endif %}
+        {% if current_user.is_system_admin %}<a class="nav-link{% if request.endpoint == 'main.admin_database' %} active{% endif %}" href="{{ url_for('main.admin_database') }}">Backup</a>{% endif %}
+        <span class="user-name">{{ current_user.display_name }}</span>
         <form method="post" action="{{ url_for('auth.logout') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="link-button">Έξοδος</button>
+          <button class="logout-button">Έξοδος</button>
         </form>
       </nav>
     {% endif %}

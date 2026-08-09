@@ -1,0 +1,8 @@
+<div class="section-head"><div><p class="eyebrow">Server copies</p><h2>Πρόσφατα τοπικά backups</h2></div><span class="notice">{{ backups|length }} αρχεία</span></div>
+{% if backup_message %}<div class="backup-inline-message success" role="status">{{ backup_message }}</div>{% endif %}
+{% if backup_error %}<div class="backup-inline-message error" role="alert">{{ backup_error }}</div>{% endif %}
+{% if backups %}
+<div class="table-wrap"><table><thead><tr><th>Αρχείο</th><th>Ημερομηνία</th><th class="numeric">Μέγεθος</th><th class="numeric">Ενέργεια</th></tr></thead><tbody>
+  {% for backup in backups %}<tr><td><strong>{{ backup.name }}</strong></td><td>{{ backup.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td><td class="numeric">{{ '%.2f'|format(backup.size_mb) }} MB</td><td class="numeric"><form method="post" action="{{ url_for('main.admin_database_backup_delete', filename=backup.name) }}" hx-post="{{ url_for('main.admin_database_backup_delete', filename=backup.name) }}" hx-target="#backup-history-content" hx-swap="innerHTML" hx-disabled-elt="button" class="backup-delete-form" onsubmit="return confirm('Να διαγραφεί οριστικά αυτό το backup;')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="delete-backup-button">Διαγραφή</button></form></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty">Δεν έχουν δημιουργηθεί ακόμη τοπικά backups.</div>{% endif %}

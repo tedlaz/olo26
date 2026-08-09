@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Backup / Restore{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">System administration</p><h1>Backup / Restore</h1><p>Ασφαλής συντήρηση της λειτουργικής βάσης SQLite.</p></div>
+</div>
+
+<div class="database-stats">
+  <article><span>Αρχείο</span><strong>{{ stats.file_name }}</strong><small>{{ '%.2f'|format(stats.size_mb) }} MB</small></article>
+  <article><span>Κτίρια</span><strong>{{ stats.buildings }}</strong></article>
+  <article><span>Περίοδοι</span><strong>{{ stats.periods }}</strong></article>
+  <article><span>Δαπάνες</span><strong>{{ stats.expenses }}</strong></article>
+  <article><span>Χρήστες</span><strong>{{ stats.users }}</strong></article>
+</div>
+
+<div class="maintenance-grid">
+  <section class="card maintenance-card backup-card">
+    <div class="maintenance-heading">
+      <span class="maintenance-icon" aria-hidden="true">↓</span>
+      <div><p class="eyebrow">Ασφαλές αντίγραφο</p><h2>Δημιουργία backup</h2></div>
+    </div>
+    <p>Δημιουργεί συνεπές snapshot με το SQLite online-backup API, το ελέγχει και το κατεβάζει στον υπολογιστή σας.</p>
+    <ul class="maintenance-checks">
+      <li>Integrity check</li>
+      <li>Έλεγχος foreign keys</li>
+      <li>Έλεγχος schema εφαρμογής</li>
+    </ul>
+    <form method="post" action="{{ url_for('main.admin_database_backup') }}" hx-boost="false" data-hx-boost="false" data-backup-download data-prepare-url="{{ url_for('main.admin_database_backup_prepare') }}" data-history-url="{{ url_for('main.admin_database_backups_fragment') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button data-idle-text="Δημιουργία και λήψη backup">Δημιουργία και λήψη backup</button>
+    </form>
+  </section>
+
+  <section class="card maintenance-card restore-card">
+    <div class="maintenance-heading">
+      <span class="maintenance-icon danger-icon" aria-hidden="true">↺</span>
+      <div><p class="eyebrow">Ελεγχόμενη επαναφορά</p><h2>Restore βάσης</h2></div>
+    </div>
+    <div class="restore-warning"><strong>Προσοχή</strong><span>Το restore αντικαθιστά όλα τα τρέχοντα δεδομένα. Δημιουργείται αυτόματα pre-restore backup πριν την αλλαγή.</span></div>
+    <form method="post" action="{{ url_for('main.admin_database_restore') }}" enctype="multipart/form-data" class="stack restore-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Αρχείο SQLite backup
+        <input type="file" name="database_file" accept=".db,application/vnd.sqlite3,application/x-sqlite3" required>
+        <small>Μέγιστο μέγεθος {{ max_restore_mb }} MB</small>
+      </label>
+      <label>Τρέχων κωδικός admin<input type="password" name="password" autocomplete="current-password" required></label>
+      <label>Επιβεβαίωση<input name="confirmation" placeholder="Πληκτρολογήστε RESTORE" autocomplete="off" required></label>
+      <button class="restore-button">Έλεγχος και restore</button>
+    </form>
+  </section>
+</div>
+
+<section class="card backup-history">
+  <div id="backup-history-content">{% include "admin/_backup_history.html" %}</div>
+</section>
+{% endblock %}

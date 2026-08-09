@@ -10,6 +10,31 @@ from .extensions import csrf, db, login_manager
 from .models import Apartment, Building, Period, User
 
 
+def configured_secret_key():
+    secret_file = os.environ.get("SECRET_KEY_FILE")
+    if secret_file:
+        try:
+            secret = Path(secret_file).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise RuntimeError(f"Unable to read SECRET_KEY_FILE: {exc}") from exc
+        if len(secret) < 32:
+            raise RuntimeError("SECRET_KEY_FILE must contain at least 32 characters.")
+        return secret
+    environment_secret = os.environ.get("SECRET_KEY")
+    if environment_secret:
+        return environment_secret
+    if os.environ.get("APP_ENV", "").strip().lower() == "production":
+        raise RuntimeError("Production requires SECRET_KEY_FILE or SECRET_KEY.")
+    return "dev-only-change-me"
+
+
+def environment_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def initialize_database():
     """Create or safely upgrade the application database."""
     db.create_all()
@@ -67,14 +92,18 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", "dev-only-change-me"),
+        SECRET_KEY=configured_secret_key(),
         SQLALCHEMY_DATABASE_URI=os.environ.get(
             "DATABASE_URL", f"sqlite:///{Path(app.instance_path) / 'koinoxrista_app.db'}"
         ),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=environment_flag("COOKIE_SECURE"),
         LEGACY_DATABASE=str(Path(app.root_path).parent / "koinoxrista.db"),
         INVITATION_TTL_HOURS=72,
         RESET_TTL_HOURS=2,
+        MAX_RESTORE_BYTES=200 * 1024 * 1024,
         AUTO_INIT_DATABASE=True,
     )
     if test_config:
@@ -91,6 +120,25 @@ def create_app(test_config=None):
 
     app.register_blueprint(auth)
     app.register_blueprint(main)
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+        )
+        return response
+
+    @app.get("/health")
+    def health():
+        try:
+            db.session.execute(text("SELECT 1"))
+        except Exception:
+            db.session.rollback()
+            return {"status": "unhealthy"}, 503
+        return {"status": "ok"}
 
     if app.config["AUTO_INIT_DATABASE"]:
         with app.app_context():
@@ -116,7 +164,12 @@ def create_app(test_config=None):
         view_args = request.view_args or {}
         if endpoint == "main.dashboard" or endpoint.startswith("auth."):
             return {}
-        if endpoint in {"main.admin_users", "main.building_create", "main.initial_setup"}:
+        if endpoint in {
+            "main.admin_users",
+            "main.admin_database",
+            "main.building_create",
+            "main.initial_setup",
+        }:
             return {
                 "back_navigation": {
                     "url": url_for("main.dashboard"),
