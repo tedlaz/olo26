@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Κοινόχρηστα{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body hx-boost="true">
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('main.dashboard') }}">ΚΟΙΝΟΧΡΗΣΤΑ</a>
+    {% if current_user.is_authenticated %}
+      <nav>
+        <a href="{{ url_for('main.dashboard') }}">Κτίρια</a>
+        {% if current_user.is_system_admin %}<a href="{{ url_for('main.admin_users') }}">Χρήστες</a>{% endif %}
+        <span>{{ current_user.display_name }}</span>
+        <form method="post" action="{{ url_for('auth.logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link-button">Έξοδος</button>
+        </form>
+      </nav>
+    {% endif %}
+  </header>
+  <main class="shell">
+    {% if back_navigation %}
+      <nav class="back-navigation" aria-label="Επιστροφή στην προηγούμενη ενότητα">
+        <a href="{{ back_navigation.url }}"><span aria-hidden="true">&larr;</span> {{ back_navigation.label }}</a>
+      </nav>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

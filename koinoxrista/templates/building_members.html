@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">{{ building.name }}</p><h1>Μέλη κτιρίου</h1></div></div>
+<section class="card"><h2>Πρόσβαση</h2><div class="table-wrap"><table><thead><tr><th>Χρήστης</th><th>Email</th><th>Ρόλος</th></tr></thead><tbody>{% for item in memberships %}<tr><td>{{ item.user.display_name }}</td><td>{{ item.user.email }}</td><td>{{ item.role }}</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="card"><h2>Προσθήκη ή αλλαγή ρόλου</h2><form method="post" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="user_id" required>{% for user in users %}<option value="{{ user.id }}">{{ user.display_name }} ({{ user.email }})</option>{% endfor %}</select><select name="role"><option value="viewer">viewer</option><option value="editor">editor</option><option value="building_admin">building-admin</option></select><button>Αποθήκευση</button></form></section>
+{% endblock %}

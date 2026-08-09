@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">System administration</p><h1>Χρήστες & προσκλήσεις</h1></div>
+</div>
+
+<section class="card invite-card">
+  <h2>Νέα πρόσκληση</h2>
+  <form method="post" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="email" name="email" placeholder="Email (προαιρετικό)">
+    <button>Δημιουργία link</button>
+  </form>
+  {% if generated_link %}
+    <label class="generated-link">Invitation link<input value="{{ generated_link }}" readonly onclick="this.select()"></label>
+  {% endif %}
+</section>
+
+<section class="access-legend" aria-label="Επεξήγηση τύπων πρόσβασης">
+  <div><strong>Μόνο προβολή</strong><span>Βλέπει μόνο οριστικοποιημένες περιόδους και αναφορές.</span></div>
+  <div><strong>Προβολή και αλλαγές</strong><span>Καταχωρίζει στοιχεία, δαπάνες και οριστικοποιεί περιόδους.</span></div>
+  <div><strong>Πλήρης διαχείριση</strong><span>Επιπλέον διαχειρίζεται μέλη και επανανοίγει περιόδους.</span></div>
+</section>
+
+<div class="user-admin-list">
+{% for user in users %}
+  <article class="card user-admin-card">
+    <header class="user-admin-head">
+      <div>
+        <p class="eyebrow">{% if user.is_system_admin %}System admin{% elif user.email.endswith('@invalid.local') %}Ιστορικός διαχειριστής{% else %}Χρήστης{% endif %}</p>
+        <h2>{{ user.display_name }}</h2>
+        <p>{{ user.email }}</p>
+      </div>
+      <div class="permission-badges" aria-label="Καθολικά δικαιώματα">
+        <span class="permission-badge {{ 'allowed' if user.is_active_account else 'denied' }}">{{ 'Ενεργός' if user.is_active_account else 'Ανενεργός' }}</span>
+        <span class="permission-badge {{ 'allowed' if user.can_create_building else 'neutral' }}">{{ 'Μπορεί να δημιουργεί κτίρια' if user.can_create_building else 'Δεν δημιουργεί κτίρια' }}</span>
+      </div>
+    </header>
+
+    <div class="user-admin-columns">
+      <section class="user-settings">
+        <h3>Στοιχεία και καθολικά δικαιώματα</h3>
+        <form method="post" action="{{ url_for('main.user_permissions', user_id=user.id) }}" class="stack">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>Ονοματεπώνυμο<input name="display_name" value="{{ user.display_name }}" required></label>
+          <label>Email<input type="email" name="email" value="{{ user.email }}" {% if user.is_system_admin %}readonly{% endif %} required></label>
+          {% if user.is_system_admin %}
+            <p class="access-callout">Ο system admin είναι πάντα ενεργός, δημιουργεί κτίρια και έχει πλήρη πρόσβαση παντού.</p>
+          {% else %}
+            <label class="permission-check"><input type="checkbox" name="is_active" {% if user.is_active_account %}checked{% endif %}><span><strong>Ενεργός λογαριασμός</strong><small>Μπορεί να συνδεθεί στην εφαρμογή</small></span></label>
+            <label class="permission-check"><input type="checkbox" name="can_create_building" {% if user.can_create_building %}checked{% endif %}><span><strong>Δημιουργία κτιρίου</strong><small>Μπορεί να δημιουργήσει και να διαχειριστεί νέο κτίριο</small></span></label>
+          {% endif %}
+          <button>Αποθήκευση στοιχείων</button>
+        </form>
+        <form method="post" action="{{ url_for('main.user_reset', user_id=user.id) }}" class="reset-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="secondary">Δημιουργία password reset link</button>
+        </form>
+      </section>
+
+      <section class="building-access">
+        <div class="section-head"><div><h3>Πρόσβαση σε κτίρια</h3><p>Τι μπορεί να κάνει ο χρήστης σε κάθε κτίριο.</p></div></div>
+        {% if user.is_system_admin %}
+          <div class="access-callout strong">Πλήρης διαχείριση σε όλα τα κτίρια</div>
+        {% else %}
+          {% set user_memberships = memberships_by_user.get(user.id, []) %}
+          {% if user_memberships %}
+          <div class="access-list">
+            {% for membership in user_memberships %}
+            <div class="access-row">
+              <div class="access-building"><strong>{{ membership.building.name }}</strong><span>{{ membership.building.address }}</span></div>
+              <form method="post" action="{{ url_for('main.user_building_access', user_id=user.id) }}" class="access-role-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="building_id" value="{{ membership.building_id }}">
+                <label>Τύπος πρόσβασης
+                  <select name="role">
+                    <option value="viewer" {% if membership.role == 'viewer' %}selected{% endif %}>Μόνο προβολή</option>
+                    <option value="editor" {% if membership.role == 'editor' %}selected{% endif %}>Προβολή και αλλαγές</option>
+                    <option value="building_admin" {% if membership.role == 'building_admin' %}selected{% endif %}>Πλήρης διαχείριση</option>
+                  </select>
+                </label>
+                <button>Αλλαγή</button>
+              </form>
+              <form method="post" action="{{ url_for('main.user_building_access_delete', user_id=user.id, building_id=membership.building_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="link-button danger">Αφαίρεση πρόσβασης</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+            <div class="no-access">Δεν έχει πρόσβαση σε κανένα κτίριο.</div>
+          {% endif %}
+
+          {% if buildings %}
+          <form method="post" action="{{ url_for('main.user_building_access', user_id=user.id) }}" class="grant-access-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <h4>Προσθήκη ή αλλαγή πρόσβασης</h4>
+            <label>Κτίριο<select name="building_id" required>{% for building in buildings %}<option value="{{ building.id }}">{{ building.name }}</option>{% endfor %}</select></label>
+            <label>Τύπος πρόσβασης<select name="role"><option value="viewer">Μόνο προβολή</option><option value="editor">Προβολή και αλλαγές</option><option value="building_admin">Πλήρης διαχείριση</option></select></label>
+            <button>Αποθήκευση πρόσβασης</button>
+          </form>
+          {% endif %}
+        {% endif %}
+      </section>
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endblock %}

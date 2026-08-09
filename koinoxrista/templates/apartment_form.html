@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Διόρθωση διαμερίσματος{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <p class="eyebrow">{{ apartment.building.name }}</p>
+  <h1>Διόρθωση διαμερίσματος</h1>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Αριθμός<input type="number" name="number" value="{{ apartment.number }}" required></label>
+    <label>Ονομασία<input name="name" value="{{ apartment.name }}" required></label>
+    <label>Όροφος<input type="number" name="floor" value="{{ apartment.floor }}" required></label>
+    <label>Τετραγωνικά<input type="number" step="0.01" min="0" name="square_meters" value="{{ apartment.square_meters }}" required></label>
+    <label>Ιδιοκτήτης<input name="owner" value="{{ apartment.owner }}"></label>
+    <label>Ένοικος<input name="occupant" value="{{ apartment.occupant }}"></label>
+    <button>Αποθήκευση αλλαγών</button>
+  </form>
+</section>
+{% endblock %}

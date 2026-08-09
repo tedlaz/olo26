@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Χαρτοφυλάκιο</p><h1>Κτίρια</h1></div>
+  <div class="actions">
+    {% if current_user.is_system_admin and not buildings %}<a class="button secondary" href="{{ url_for('main.initial_setup') }}">Εισαγωγή αρχικής βάσης</a>{% endif %}
+    {% if current_user.is_system_admin or current_user.can_create_building %}<a class="button" href="{{ url_for('main.building_create') }}">Νέο κτίριο</a>{% endif %}
+  </div>
+</div>
+<div class="building-grid">
+  {% for building in buildings %}
+    <a class="building-card" href="{{ url_for('main.building_detail', building_id=building.id) }}">
+      <span class="building-number">{{ '%02d'|format(loop.index) }}</span>
+      <h2>{{ building.name }}</h2><p>{{ building.address }} · {{ building.postal_code }}</p>
+      <strong>{{ building.periods|length }} περίοδοι</strong>
+    </a>
+  {% else %}<div class="empty">Δεν υπάρχει ακόμη διαθέσιμο κτίριο.</div>{% endfor %}
+</div>
+{% endblock %}

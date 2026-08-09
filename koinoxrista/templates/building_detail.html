@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ building.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">{{ building.address }} · {{ building.postal_code }}</p><h1>{{ building.name }}</h1></div>
+  {% if role in ('editor', 'building_admin') %}<div class="actions">{% if role == 'building_admin' %}<a class="button secondary" href="{{ url_for('main.building_members', building_id=building.id) }}">Μέλη</a>{% endif %}<a class="button secondary" href="{{ url_for('main.millesimals', building_id=building.id) }}">Μήτρα χιλιοστών</a><a class="button" href="{{ url_for('main.period_create', building_id=building.id) }}">Νέα περίοδος</a></div>{% endif %}
+</div>
+<div class="stats">
+  <article><span>Διαμερίσματα</span><strong>{{ building.apartments|length }}</strong></article>
+  <article><span>Κατηγορίες</span><strong>{{ building.categories|length }}</strong></article>
+  <article><span>Περίοδοι</span><strong>{{ periods_pagination.total }}</strong></article>
+</div>
+{% if role in ('editor', 'building_admin') %}<details class="card"><summary><strong>Επεξεργασία στοιχείων κτιρίου και εμφάνισης</strong></summary><form method="post" action="{{ url_for('main.building_update', building_id=building.id) }}" class="compact-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Ονομασία<input name="name" value="{{ building.name }}" required></label><label>Διεύθυνση<input name="address" value="{{ building.address }}" required></label><label>ΤΚ<input name="postal_code" value="{{ building.postal_code }}" required></label><label>Εμφάνιση διαμερισμάτων<select name="apartment_display_mode"><option value="occupant" {% if building.apartment_display_mode == 'occupant' %}selected{% endif %}>Αριθμός + ένοικος</option><option value="owner" {% if building.apartment_display_mode == 'owner' %}selected{% endif %}>Αριθμός + ιδιοκτήτης</option><option value="name" {% if building.apartment_display_mode == 'name' %}selected{% endif %}>Αριθμός + ονομασία</option></select></label><button>Αποθήκευση</button></form></details>{% endif %}
+
+<section class="card"><div class="section-head"><h2>Περίοδοι</h2></div>
+  <div class="table-wrap"><table><thead><tr><th>Έκδοση</th><th>No</th><th>Σχόλια</th><th>Κατάσταση</th><th class="numeric">Σύνολο</th></tr></thead><tbody>
+    {% for period in periods %}<tr><td><a href="{{ url_for('main.period_detail', period_id=period.id) }}">{{ period.issue_date.strftime('%d/%m/%Y') }}</a></td><td>{{ period.id }}</td><td>{{ period.comments }}</td><td><span class="status {{ period.status }}">{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</span></td><td class="numeric">{{ '%.2f'|format(period.total) }} €</td></tr>
+    {% else %}<tr><td colspan="5">Δεν υπάρχουν περίοδοι.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if periods_pagination.pages > 1 %}
+  <nav class="pagination" aria-label="Σελίδες περιόδων">
+    <a class="page-link{% if not periods_pagination.has_prev %} disabled{% endif %}" {% if periods_pagination.has_prev %}href="{{ url_for('main.building_detail', building_id=building.id, page=periods_pagination.prev_num) }}"{% endif %}>Προηγούμενη</a>
+    <div class="page-numbers">
+      {% for page_number in periods_pagination.iter_pages(left_edge=1, left_current=2, right_current=3, right_edge=1) %}
+        {% if page_number %}<a class="page-link{% if page_number == periods_pagination.page %} current{% endif %}" href="{{ url_for('main.building_detail', building_id=building.id, page=page_number) }}" {% if page_number == periods_pagination.page %}aria-current="page"{% endif %}>{{ page_number }}</a>{% else %}<span class="page-gap">…</span>{% endif %}
+      {% endfor %}
+    </div>
+    <a class="page-link{% if not periods_pagination.has_next %} disabled{% endif %}" {% if periods_pagination.has_next %}href="{{ url_for('main.building_detail', building_id=building.id, page=periods_pagination.next_num) }}"{% endif %}>Επόμενη</a>
+  </nav>
+  {% endif %}
+</section>
+
+<div class="two-col">
+  <section class="card"><div class="section-head"><h2>Διαμερίσματα</h2></div>
+    <ul class="clean-list">{% for item in building.apartments|sort(attribute='number') %}<li><div><strong>{{ item.display_label() }}</strong><span>{{ item.floor }}ος όροφος · {{ item.square_meters }} m²</span></div>{% if role in ('editor', 'building_admin') %}<a href="{{ url_for('main.apartment_edit', apartment_id=item.id) }}">Διόρθωση</a>{% endif %}</li>{% else %}<li>Δεν υπάρχουν διαμερίσματα.</li>{% endfor %}</ul>
+    {% if role in ('editor', 'building_admin') %}<form method="post" action="{{ url_for('main.apartment_add', building_id=building.id) }}" class="compact-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="name" placeholder="Ονομασία" required><input type="number" name="number" placeholder="Αριθμός" required><input type="number" name="floor" placeholder="Όροφος" value="0" required><input type="number" step="0.01" name="square_meters" placeholder="m²" required><input name="owner" placeholder="Ιδιοκτήτης"><input name="occupant" placeholder="Ένοικος"><button>Προσθήκη</button>
+    </form>{% endif %}
+  </section>
+  <section class="card"><div class="section-head"><h2>Κατηγορίες</h2>{% if role in ('editor', 'building_admin') %}<a href="{{ url_for('main.category_add', building_id=building.id) }}">Νέα</a>{% endif %}</div>
+    <ul class="clean-list">{% for item in building.categories %}<li><strong>{{ item.name }}</strong></li>{% else %}<li>Δεν υπάρχουν κατηγορίες.</li>{% endfor %}</ul>
+  </section>
+</div>
+
+<section class="card"><div class="section-head"><h2>Διαχειριστές</h2></div>
+  <ul class="clean-list">{% for item in managers %}<li><strong>{{ item.display_name }}</strong><span>{{ item.date_from.strftime('%d/%m/%Y') }}{% if item.date_to %} – {{ item.date_to.strftime('%d/%m/%Y') }}{% else %} – σήμερα{% endif %}</span></li>{% endfor %}</ul>
+  {% if role == 'building_admin' and eligible_users %}<form method="post" action="{{ url_for('main.manager_assign', building_id=building.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="user_id" required>{% for user in eligible_users %}<option value="{{ user.id }}">{{ user.display_name }} ({{ user.email }})</option>{% endfor %}</select><input type="date" name="date_from" required><button>Νέα θητεία</button>
+  </form>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card narrow"><p class="eyebrow">Αρχική εγκατάσταση</p><h1>Εισαγωγή υπάρχοντος κτιρίου</h1>
+  <p>Η αρχική βάση θα διαβαστεί χωρίς να τροποποιηθεί. Η εισαγωγή επιτρέπεται μόνο σε αυτό το πρώτο setup και δεν θα είναι ξανά διαθέσιμη μετά τη δημιουργία του κτιρίου.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Ονομασία κτιρίου<input name="name" required></label>
+    <label>Διεύθυνση<input name="address" required></label>
+    <label>Ταχυδρομικός κώδικας<input name="postal_code" required></label>
+    <button>Έλεγχος και εισαγωγή</button>
+  </form>
+</section>
+{% endblock %}

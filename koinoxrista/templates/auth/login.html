@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Σύνδεση{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <p class="eyebrow">Διαχείριση κτιρίων</p>
+  <h1>Σύνδεση</h1>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Email<input type="email" name="email" required autofocus></label>
+    <label>Password<input type="password" name="password" required></label>
+    <button>Είσοδος</button>
+  </form>
+</section>
+{% endblock %}

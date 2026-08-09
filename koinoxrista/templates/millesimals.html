@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">{{ building.name }}</p><h1>Μήτρα χιλιοστών</h1></div></div>
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="table-wrap"><table class="matrix"><thead><tr><th>Διαμέρισμα</th>{% for category in categories %}<th>{{ category.name }}</th>{% endfor %}</tr></thead><tbody>
+    {% for apartment in apartments %}<tr><th>{{ apartment.display_label() }}</th>{% for category in categories %}<td><input type="number" min="0" max="1000" name="m_{{ apartment.id }}_{{ category.id }}" value="{{ values.get((apartment.id, category.id), 0) }}" required></td>{% endfor %}</tr>{% endfor %}
+  </tbody><tfoot><tr><th>Απαιτούμενο σύνολο</th>{% for category in categories %}<th>1000</th>{% endfor %}</tr></tfoot></table></div>
+  <div class="form-footer"><p>Η αποθήκευση απορρίπτεται αν έστω μία στήλη δεν αθροίζει σε 1000.</p><button>Αποθήκευση μήτρας</button></div>
+</form>
+{% endblock %}

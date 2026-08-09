@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">{{ building.name }}</p><h1>Νέα κατηγορία</h1></div></div>
+<form method="post" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Ονομασία<input name="name" required></label>
+  <h2>Χιλιοστά</h2>
+  {% for apartment in apartments %}<label>{{ apartment.display_label() }}<input type="number" min="0" max="1000" name="a_{{ apartment.id }}" value="0" required></label>{% endfor %}
+  <p>Το άθροισμα πρέπει να είναι ακριβώς 1000.</p><button>Δημιουργία κατηγορίας</button>
+</form>
+{% endblock %}
