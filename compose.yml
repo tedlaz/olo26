@@ -19,7 +19,9 @@ services:
       PDF_FONT_PATH: /usr/share/fonts/dejavu/DejaVuSans.ttf
       PDF_FONT_BOLD_PATH: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
     secrets:
-      - flask_secret_key
+      - source: flask_secret_key
+        target: flask_secret_key
+        mode: 0444
     volumes:
       - app_data:/app/instance
       # For a one-time legacy import, uncomment the next line:

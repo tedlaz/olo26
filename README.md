@@ -53,10 +53,14 @@ Set-Content -LiteralPath secrets/flask_secret_key -Value $secret -NoNewline
 Linux/macOS:
 
 ```bash
-mkdir -p secrets
+install -d -m 700 secrets
 openssl rand -hex 64 > secrets/flask_secret_key
-chmod 600 secrets/flask_secret_key
+chmod 644 secrets/flask_secret_key
 ```
+
+Ο φάκελος παραμένει `0700`, άρα άλλοι host users δεν μπορούν να τον προσπελάσουν.
+Το αρχείο είναι `0644` ώστε να μπορεί να διαβαστεί από τον non-root χρήστη του
+container μέσω του read-only Docker secret mount.
 
 2. Προαιρετικά αντιγράψτε το `.env.example` σε `.env` και αλλάξτε port/bind.
 
@@ -73,7 +77,7 @@ docker compose ps
 docker compose logs -f app
 ```
 
-Η εφαρμογή είναι διαθέσιμη στο `http://127.0.0.1:8000`. Σε νέα εγκατάσταση
+Η εφαρμογή είναι διαθέσιμη στο `http://127.0.0.1:8076`. Σε νέα εγκατάσταση
 συνδεθείτε με `admin@admin.app` / `changeme`, αλλάξτε τον κωδικό και χρησιμοποιήστε
 το **Backup → Restore** για επαναφορά υπάρχουσου backup.
 
@@ -91,6 +95,19 @@ docker compose down --remove-orphans
 Το `docker compose down` δεν διαγράφει τη βάση. Μην χρησιμοποιήσετε
 `docker compose down -v` εκτός αν θέλετε να διαγράψετε οριστικά το volume.
 
-Για έκθεση μέσω HTTPS/reverse proxy, ορίστε `COOKIE_SECURE=true`. Από προεπιλογή
-το port δεσμεύεται μόνο στο `127.0.0.1`, ώστε η εφαρμογή να μην εκτίθεται απευθείας
-στο δίκτυο.
+### Ρύθμιση `COOKIE_SECURE`
+
+Η μεταβλητή `COOKIE_SECURE` καθορίζει αν το cookie σύνδεσης αποστέλλεται μόνο
+μέσω HTTPS:
+
+- `COOKIE_SECURE=false`: χρησιμοποιήστε το όταν η εφαρμογή ανοίγει απευθείας με
+  HTTP, π.χ. `http://127.0.0.1:8076`.
+- `COOKIE_SECURE=true`: χρησιμοποιήστε το όταν η εφαρμογή εξυπηρετείται μέσω
+  HTTPS/reverse proxy. Το cookie δεν αποστέλλεται ποτέ μέσω απλού HTTP.
+
+Αν οριστεί `COOKIE_SECURE=true` χωρίς να υπάρχει HTTPS, η σύνδεση του χρήστη δεν
+θα διατηρείται. Για δημόσια έκθεση της εφαρμογής συνιστώνται οπωσδήποτε HTTPS
+και `COOKIE_SECURE=true`.
+
+Από προεπιλογή το port δεσμεύεται μόνο στο `127.0.0.1`, ώστε η εφαρμογή να μην
+εκτίθεται απευθείας στο δίκτυο.
