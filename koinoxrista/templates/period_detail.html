@@ -1,12 +1,102 @@
 {% extends "base.html" %}
 {% block title %}Περίοδος {{ period.issue_date }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><p class="eyebrow"><a href="{{ url_for('main.building_detail', building_id=period.building.id) }}">{{ period.building.name }}</a></p><h1>{{ period.issue_date.strftime('%d/%m/%Y') }}</h1><p>{{ period.comments }}</p></div>
-  <div class="actions">{% if period.status == 'finalized' %}<a class="button secondary" href="{{ url_for('main.period_report_pdf', period_id=period.id) }}" data-hx-boost="false">PDF αναφορά</a><a class="button secondary" href="{{ url_for('main.period_receipts_pdf', period_id=period.id) }}" data-hx-boost="false">PDF αποδείξεις</a>{% endif %}{% if period.status == 'draft' and role in ('editor','building_admin') %}<form method="post" action="{{ url_for('main.period_finalize', period_id=period.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Οριστικοποίηση</button></form>{% elif period.status == 'finalized' and role == 'building_admin' %}<form method="post" action="{{ url_for('main.period_reopen', period_id=period.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Επανάνοιγμα</button></form>{% endif %}</div>
+<div class="page-head">
+  <div>
+    <p class="eyebrow"><a href="{{ url_for('main.building_detail', building_id=period.building.id) }}">{{ period.building.name }}</a></p>
+    <h1>{{ period.issue_date.strftime('%d/%m/%Y') }}</h1>
+    <p>{{ period.comments }}</p>
+  </div>
+  <div class="actions">
+    {% if period.status == 'draft' and role in ('editor','building_admin') %}
+      <a class="button secondary" href="{{ url_for('main.period_edit', period_id=period.id) }}">Διόρθωση στοιχείων</a>
+    {% endif %}
+    {% if period.status == 'finalized' %}
+      <a class="button secondary" href="{{ url_for('main.period_report_pdf', period_id=period.id) }}" data-hx-boost="false">PDF αναφορά</a>
+      <a class="button secondary" href="{{ url_for('main.period_receipts_pdf', period_id=period.id) }}" data-hx-boost="false">PDF αποδείξεις</a>
+    {% endif %}
+    {% if period.status == 'draft' and role in ('editor','building_admin') %}
+      <form method="post" action="{{ url_for('main.period_finalize', period_id=period.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button>Οριστικοποίηση</button>
+      </form>
+    {% elif period.status == 'finalized' and role == 'building_admin' %}
+      <form method="post" action="{{ url_for('main.period_reopen', period_id=period.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button>Επανάνοιγμα</button>
+      </form>
+    {% endif %}
+  </div>
 </div>
-<div class="stats"><article><span>Κατάσταση</span><strong>{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</strong></article><article><span>Διαχειριστής</span><strong>{{ period.manager_name_snapshot }}</strong></article><article><span>No</span><strong>{{ period.id }}</strong></article></div>
-<section class="card"><h2>Δαπάνες</h2><div class="table-wrap"><table class="expense-ledger"><thead><tr><th>Ημ/νία</th><th>Παρ/κό</th><th>Περιγραφή</th>{% for category in expense_report.categories %}<th class="numeric">{{ category.name }}</th>{% endfor %}</tr></thead><tbody>{% for row in expense_report.rows %}<tr><td>{{ row.expense.invoice_date.strftime('%d/%m/%Y') }}</td><td>{{ row.expense.invoice_number }}</td><td>{{ row.expense.description }}{% if period.status == 'draft' and role in ('editor','building_admin') %}<form class="mini-form" method="post" action="{{ url_for('main.expense_delete', expense_id=row.expense.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-button danger">Διαγραφή</button></form>{% endif %}</td>{% for amount in row['values'] %}<td class="numeric">{% if amount is not none %}{{ '%.2f'|format(amount) }} €{% endif %}</td>{% endfor %}</tr>{% else %}<tr><td colspan="{{ 3 + expense_report.categories|length }}">Δεν έχουν καταχωριστεί δαπάνες.</td></tr>{% endfor %}</tbody>{% if expense_report.rows %}<tfoot><tr><th colspan="3">Σύνολα</th>{% for total in expense_report.totals %}<th class="numeric">{{ '%.2f'|format(total) }} €</th>{% endfor %}</tr><tr class="grand-total"><th colspan="3">Γενικό Σύνολο</th><th class="numeric" colspan="{{ expense_report.categories|length }}">{{ '%.2f'|format(expense_report.grand_total) }} €</th></tr></tfoot>{% endif %}</table></div>
-{% if period.status == 'draft' and role in ('editor','building_admin') %}<form method="post" action="{{ url_for('main.expense_add', period_id=period.id) }}" class="compact-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="date" name="invoice_date" required><input name="invoice_number" placeholder="Αρ. παραστατικού" required><input name="description" placeholder="Περιγραφή" required><select name="category_id" required>{% for category in period.building.categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select><input type="number" step="0.01" name="amount" placeholder="Ποσό" required><button>Προσθήκη</button></form>{% endif %}
+
+<div class="stats">
+  <article><span>Κατάσταση</span><strong>{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</strong></article>
+  <article><span>Διαχειριστής</span><strong>{{ period.manager_name_snapshot }}</strong></article>
+  <article><span>No</span><strong>{{ period.id }}</strong></article>
+</div>
+
+<section class="card">
+  <h2>Δαπάνες</h2>
+  <div class="table-wrap">
+    <table class="expense-ledger">
+      <thead>
+        <tr><th>Ημ/νία</th><th>Παρ/κό</th><th>Περιγραφή</th>{% for category in expense_report.categories %}<th class="numeric">{{ category.name }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for row in expense_report.rows %}
+          <tr>
+            <td>{{ row.expense.invoice_date.strftime('%d/%m/%Y') }}</td>
+            <td>{{ row.expense.invoice_number }}</td>
+            <td>
+              {{ row.expense.description }}
+              {% if period.status == 'draft' and role in ('editor','building_admin') %}
+                <span class="expense-row-actions">
+                  <a class="expense-action-badge" href="{{ url_for('main.expense_edit', expense_id=row.expense.id) }}">Διόρθωση</a>
+                  <form class="mini-form" method="post" action="{{ url_for('main.expense_delete', expense_id=row.expense.id) }}" data-confirm="Να διαγραφεί οριστικά αυτή η δαπάνη;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="expense-action-badge danger">Διαγραφή</button>
+                  </form>
+                </span>
+              {% endif %}
+            </td>
+            {% for amount in row['values'] %}<td class="numeric">{% if amount is not none %}{{ '%.2f'|format(amount) }} €{% endif %}</td>{% endfor %}
+          </tr>
+        {% else %}
+          <tr><td colspan="{{ 3 + expense_report.categories|length }}">Δεν έχουν καταχωριστεί δαπάνες.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if expense_report.rows %}
+        <tfoot>
+          <tr><th colspan="3">Σύνολα</th>{% for total in expense_report.totals %}<th class="numeric">{{ '%.2f'|format(total) }} €</th>{% endfor %}</tr>
+          <tr class="grand-total"><th colspan="3">Γενικό Σύνολο</th><th class="numeric" colspan="{{ expense_report.categories|length }}">{{ '%.2f'|format(expense_report.grand_total) }} €</th></tr>
+        </tfoot>
+      {% endif %}
+    </table>
+  </div>
+
+  {% if period.status == 'draft' and role in ('editor','building_admin') %}
+    <div class="expense-create-panel">
+      <div class="expense-create-heading">
+        <span class="expense-create-icon" aria-hidden="true">+</span>
+        <div><h3>Νέα δαπάνη</h3><p>Καταχωρίστε τα στοιχεία του παραστατικού και το ποσό.</p></div>
+      </div>
+      <form method="post" action="{{ url_for('main.expense_add', period_id=period.id) }}" class="expense-create-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Ημερομηνία παραστατικού<input type="date" name="invoice_date" required></label>
+        <label>Αριθμός παραστατικού<input name="invoice_number" required></label>
+        <label class="expense-description-field">Περιγραφή<input name="description" required></label>
+        <label>Κατηγορία<select name="category_id" required>{% for category in period.building.categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></label>
+        <label>Ποσό (€)<input type="number" step="0.01" name="amount" required></label>
+        <div class="expense-form-action"><button>Προσθήκη δαπάνης</button></div>
+      </form>
+    </div>
+  {% endif %}
 </section>
-{% if period.status == 'finalized' %}<section class="card"><div class="section-head"><h2>Κατανομή ανά διαμέρισμα</h2>{% if period.allocations and period.allocations[0].reconstructed %}<span class="notice">Ανακατασκευασμένη με τα εισαγόμενα χιλιοστά</span>{% endif %}</div><div class="table-wrap"><table class="allocation-table"><thead><tr><th>Διαμέρισμα</th>{% for category in allocation_report.categories %}<th class="numeric">{{ category.name }}</th>{% endfor %}<th class="numeric total-column">Σύνολο</th></tr></thead><tbody>{% for row in allocation_report.rows %}<tr><td>{{ row.label }}</td>{% for amount in row['values'] %}<td class="numeric">{{ '%.2f'|format(amount) }} €</td>{% endfor %}<td class="numeric total-column"><strong>{{ '%.2f'|format(row.total) }} €</strong></td></tr>{% endfor %}</tbody><tfoot><tr><th>Σύνολα</th>{% for total in allocation_report.totals %}<th class="numeric">{{ '%.2f'|format(total) }} €</th>{% endfor %}<th class="numeric total-column">{{ '%.2f'|format(allocation_report.grand_total) }} €</th></tr></tfoot></table></div></section>{% endif %}
+
+{% if period.status == 'finalized' %}
+  <section class="card">
+    <div class="section-head"><h2>Κατανομή ανά διαμέρισμα</h2>{% if period.allocations and period.allocations[0].reconstructed %}<span class="notice">Ανακατασκευασμένη με τα εισαγόμενα χιλιοστά</span>{% endif %}</div>
+    <div class="table-wrap"><table class="allocation-table"><thead><tr><th>Διαμέρισμα</th>{% for category in allocation_report.categories %}<th class="numeric">{{ category.name }}</th>{% endfor %}<th class="numeric total-column">Σύνολο</th></tr></thead><tbody>{% for row in allocation_report.rows %}<tr><td>{{ row.label }}</td>{% for amount in row['values'] %}<td class="numeric">{{ '%.2f'|format(amount) }} €</td>{% endfor %}<td class="numeric total-column"><strong>{{ '%.2f'|format(row.total) }} €</strong></td></tr>{% endfor %}</tbody><tfoot><tr><th>Σύνολα</th>{% for total in allocation_report.totals %}<th class="numeric">{{ '%.2f'|format(total) }} €</th>{% endfor %}<th class="numeric total-column">{{ '%.2f'|format(allocation_report.grand_total) }} €</th></tr></tfoot></table></div>
+  </section>
+{% endif %}
 {% endblock %}

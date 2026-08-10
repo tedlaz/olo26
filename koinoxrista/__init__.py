@@ -7,7 +7,7 @@ from flask_login import current_user
 from sqlalchemy import inspect, text
 
 from .extensions import csrf, db, login_manager
-from .models import Apartment, Building, Period, User
+from .models import Apartment, Building, Expense, Period, User
 
 
 def configured_secret_key():
@@ -191,11 +191,28 @@ def create_app(test_config=None):
         period_id = view_args.get("period_id")
         if period_id:
             period = db.session.get(Period, period_id)
+            if endpoint == "main.period_edit" and period:
+                return {
+                    "back_navigation": {
+                        "url": url_for("main.period_detail", period_id=period.id),
+                        "label": "Πίσω στην περίοδο",
+                    }
+                }
             building = period.building if period else None
         apartment_id = view_args.get("apartment_id")
         if apartment_id:
             apartment = db.session.get(Apartment, apartment_id)
             building = apartment.building if apartment else None
+        expense_id = view_args.get("expense_id")
+        if expense_id:
+            expense = db.session.get(Expense, expense_id)
+            if expense:
+                return {
+                    "back_navigation": {
+                        "url": url_for("main.period_detail", period_id=expense.period_id),
+                        "label": "Πίσω στην περίοδο",
+                    }
+                }
         if building:
             page = session.get(f"building_page_{building.id}", 1)
             return {

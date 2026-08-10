@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Διόρθωση δαπάνης{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <p class="eyebrow">{{ period.building.name }} · {{ period.issue_date.strftime('%d/%m/%Y') }}</p>
+  <h1>Διόρθωση δαπάνης</h1>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Ημερομηνία παραστατικού<input type="date" name="invoice_date" value="{{ expense.invoice_date.isoformat() }}" required></label>
+    <label>Αριθμός παραστατικού<input name="invoice_number" value="{{ expense.invoice_number }}" required></label>
+    <label>Περιγραφή<input name="description" value="{{ expense.description }}" required></label>
+    <label>Κατηγορία<select name="category_id" required>{% for category in period.building.categories %}<option value="{{ category.id }}"{% if category.id == expense.category_id %} selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></label>
+    <label>Ποσό (€)<input type="number" step="0.01" name="amount" value="{{ expense.amount }}" required></label>
+    <button>Αποθήκευση αλλαγών</button>
+  </form>
+</section>
+{% endblock %}

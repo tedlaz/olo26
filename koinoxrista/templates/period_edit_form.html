@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Διόρθωση περιόδου{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <p class="eyebrow">{{ period.building.name }}</p>
+  <h1>Διόρθωση περιόδου</h1>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Ημερομηνία έκδοσης<input type="date" name="issue_date" value="{{ period.issue_date.isoformat() }}" required></label>
+    <label>Σχόλια<textarea name="comments" rows="4">{{ period.comments }}</textarea></label>
+    <button>Αποθήκευση αλλαγών</button>
+  </form>
+</section>
+{% endblock %}

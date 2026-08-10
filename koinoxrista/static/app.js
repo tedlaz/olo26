@@ -1,6 +1,18 @@
 (function () {
   "use strict";
 
+  document.addEventListener(
+    "submit",
+    function (event) {
+      const form = event.target.closest("form[data-confirm]");
+      if (form && !window.confirm(form.dataset.confirm)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
+
   document.addEventListener("submit", async function (event) {
     const form = event.target.closest("form[data-backup-download]");
     if (!form || !window.fetch) return;

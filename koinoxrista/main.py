@@ -464,6 +464,39 @@ def period_create(building_id):
     return render_template("period_form.html", building=building)
 
 
+@main.route("/periods/<int:period_id>/edit", methods=["GET", "POST"])
+@login_required
+def period_edit(period_id):
+    period = db.get_or_404(Period, period_id)
+    require_role(period.building_id, "editor")
+    if period.status != "draft":
+        abort(409)
+    if request.method == "POST":
+        try:
+            issue_date = parse_date(request.form.get("issue_date"), "ημερομηνία έκδοσης")
+            manager = db.session.scalar(
+                db.select(ManagerTerm).where(
+                    ManagerTerm.building_id == period.building_id,
+                    ManagerTerm.date_from <= issue_date,
+                    or_(ManagerTerm.date_to.is_(None), ManagerTerm.date_to >= issue_date),
+                )
+            )
+            if not manager:
+                raise ValueError("Δεν υπάρχει ενεργός διαχειριστής για αυτή την ημερομηνία.")
+            period.issue_date = issue_date
+            period.comments = request.form.get("comments", "").strip()
+            period.manager_term = manager
+            period.manager_name_snapshot = manager.display_name
+            audit("period_updated", current_user.id, period.building_id, str(period.id))
+            db.session.commit()
+            flash("Τα στοιχεία της περιόδου ενημερώθηκαν.", "success")
+            return redirect(url_for("main.period_detail", period_id=period.id))
+        except (ValueError, IntegrityError) as exc:
+            db.session.rollback()
+            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {exc}", "error")
+    return render_template("period_edit_form.html", period=period)
+
+
 @main.get("/periods/<int:period_id>")
 @login_required
 def period_detail(period_id):
@@ -520,25 +553,8 @@ def expense_add(period_id):
     if period.status != "draft":
         abort(409)
     try:
-        category_id = int(request.form.get("category_id", 0))
-        category = db.session.scalar(
-            db.select(ExpenseCategory).where(
-                ExpenseCategory.id == category_id,
-                ExpenseCategory.building_id == period.building_id,
-            )
-        )
-        if not category:
-            raise ValueError("Μη έγκυρη κατηγορία.")
-        expense = Expense(
-            period=period,
-            category=category,
-            invoice_date=parse_date(request.form.get("invoice_date")),
-            invoice_number=request.form.get("invoice_number", "").strip(),
-            description=request.form.get("description", "").strip(),
-            amount=Decimal(request.form.get("amount", "")),
-        )
-        if not expense.invoice_number or not expense.description:
-            raise ValueError("Ο αριθμός και η περιγραφή είναι υποχρεωτικά.")
+        expense = Expense(period=period)
+        update_expense_from_form(expense, period)
         db.session.add(expense)
         db.session.commit()
         flash("Η δαπάνη προστέθηκε.", "success")
@@ -546,6 +562,50 @@ def expense_add(period_id):
         db.session.rollback()
         flash(f"Δεν προστέθηκε η δαπάνη: {exc}", "error")
     return redirect(url_for("main.period_detail", period_id=period.id))
+
+
+def update_expense_from_form(expense, period):
+    category_id = int(request.form.get("category_id", 0))
+    category = db.session.scalar(
+        db.select(ExpenseCategory).where(
+            ExpenseCategory.id == category_id,
+            ExpenseCategory.building_id == period.building_id,
+        )
+    )
+    if not category:
+        raise ValueError("Μη έγκυρη κατηγορία.")
+
+    invoice_number = request.form.get("invoice_number", "").strip()
+    description = request.form.get("description", "").strip()
+    if not invoice_number or not description:
+        raise ValueError("Ο αριθμός και η περιγραφή είναι υποχρεωτικά.")
+
+    expense.category = category
+    expense.invoice_date = parse_date(request.form.get("invoice_date"))
+    expense.invoice_number = invoice_number
+    expense.description = description
+    expense.amount = Decimal(request.form.get("amount", ""))
+
+
+@main.route("/expenses/<int:expense_id>/edit", methods=["GET", "POST"])
+@login_required
+def expense_edit(expense_id):
+    expense = db.get_or_404(Expense, expense_id)
+    period = expense.period
+    require_role(period.building_id, "editor")
+    if period.status != "draft":
+        abort(409)
+    if request.method == "POST":
+        try:
+            update_expense_from_form(expense, period)
+            audit("expense_updated", current_user.id, period.building_id, str(expense.id))
+            db.session.commit()
+            flash("Η δαπάνη ενημερώθηκε.", "success")
+            return redirect(url_for("main.period_detail", period_id=period.id))
+        except (ValueError, InvalidOperation, IntegrityError) as exc:
+            db.session.rollback()
+            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {exc}", "error")
+    return render_template("expense_form.html", expense=expense, period=period)
 
 
 @main.post("/expenses/<int:expense_id>/delete")
