@@ -2,5 +2,6 @@
 !pyproject.toml
 !uv.lock
 !run.py
+!docker-entrypoint.sh
 !koinoxrista/
 !koinoxrista/**

@@ -5,5 +5,3 @@ __pycache__/
 *.pyc
 *.db
 .env
-secrets/*
-!secrets/.gitkeep

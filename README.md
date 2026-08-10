@@ -40,35 +40,13 @@ volume `app_data` και δεν περιλαμβάνονται ποτέ στο i
 Χρησιμοποιείται ένας Gunicorn worker, ώστε οι λειτουργίες SQLite backup/restore
 και οι εγγραφές να μην εκτελούνται ταυτόχρονα από διαφορετικές διεργασίες.
 
-1. Δημιουργήστε το Docker secret.
-
-PowerShell:
-
-```powershell
-New-Item -ItemType Directory -Force secrets | Out-Null
-$secret = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(64))
-Set-Content -LiteralPath secrets/flask_secret_key -Value $secret -NoNewline
-```
-
-Linux/macOS:
-
-```bash
-install -d -m 700 secrets
-openssl rand -hex 64 > secrets/flask_secret_key
-chmod 644 secrets/flask_secret_key
-```
-
-Ο φάκελος παραμένει `0700`, άρα άλλοι host users δεν μπορούν να τον προσπελάσουν.
-Το αρχείο είναι `0644` ώστε να μπορεί να διαβαστεί από τον non-root χρήστη του
-container μέσω του read-only Docker secret mount.
-
-2. Προαιρετικά αντιγράψτε το `.env.example` σε `.env` και αλλάξτε port/bind.
+1. Προαιρετικά αντιγράψτε το `.env.example` σε `.env` και αλλάξτε port/bind.
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-3. Δημιουργήστε και εκκινήστε το container.
+2. Δημιουργήστε και εκκινήστε το container.
 
 ```powershell
 docker compose build --pull
@@ -76,6 +54,11 @@ docker compose up -d
 docker compose ps
 docker compose logs -f app
 ```
+
+Στην πρώτη εκκίνηση δημιουργείται αυτόματα ισχυρό `flask_secret_key` στο
+persistent volume, στη διαδρομή `/app/instance/flask_secret_key`, με permissions
+`0600`. Το ίδιο secret επαναχρησιμοποιείται σε restart ή rebuild και διαγράφεται
+μόνο αν αφαιρεθεί το volume με `docker compose down -v`.
 
 Η εφαρμογή είναι διαθέσιμη στο `http://127.0.0.1:8076`. Σε νέα εγκατάσταση
 συνδεθείτε με `admin@admin.app` / `changeme`, αλλάξτε τον κωδικό και χρησιμοποιήστε

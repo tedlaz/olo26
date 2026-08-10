@@ -43,13 +43,17 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder /usr/share/fonts/dejavu/DejaVuSans.ttf /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf /usr/share/fonts/dejavu/
 COPY --chown=app:app run.py ./
 COPY --chown=app:app koinoxrista ./koinoxrista
+COPY --chown=app:app docker-entrypoint.sh ./
 
 RUN mkdir -p /app/instance \
     && chown app:app /app/instance \
-    && chmod 0700 /app/instance
+    && chmod 0700 /app/instance \
+    && chmod 0555 /app/docker-entrypoint.sh
 
 USER app:app
 EXPOSE 8000
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
