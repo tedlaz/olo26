@@ -1,8 +1,28 @@
 from collections import defaultdict
-from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 
 from .extensions import db
-from .models import Allocation, AuditLog, Millesimal, utcnow
+from .models import (
+    Allocation,
+    Apartment,
+    AuditLog,
+    Building,
+    BuildingMembership,
+    ExpenseCategory,
+    Millesimal,
+    utcnow,
+)
+
+
+class BuildingWizardError(ValueError):
+    def __init__(self, message, step):
+        super().__init__(message)
+        self.step = step
+
+
+def _wizard_text(values, key):
+    value = values.get(key, "")
+    return value.strip() if isinstance(value, str) else ""
 
 
 def audit(action, user_id=None, building_id=None, details=""):
@@ -16,6 +36,159 @@ def audit(action, user_id=None, building_id=None, details=""):
     )
 
 
+def create_building_graph(payload, creator_id):
+    if not isinstance(payload, dict):
+        raise BuildingWizardError("Τα δεδομένα της δημιουργίας δεν είναι έγκυρα.", 1)
+
+    details = payload.get("building")
+    if not isinstance(details, dict):
+        raise BuildingWizardError("Συμπληρώστε τα στοιχεία του κτιρίου.", 1)
+    name = _wizard_text(details, "name")
+    address = _wizard_text(details, "address")
+    postal_code = _wizard_text(details, "postal_code")
+    if not all((name, address, postal_code)):
+        raise BuildingWizardError("Όλα τα στοιχεία του κτιρίου είναι υποχρεωτικά.", 1)
+    if len(name) > 100 or len(address) > 200 or len(postal_code) > 10:
+        raise BuildingWizardError("Κάποιο στοιχείο του κτιρίου υπερβαίνει το επιτρεπτό μήκος.", 1)
+
+    apartment_rows = payload.get("apartments")
+    if not isinstance(apartment_rows, list) or not apartment_rows:
+        raise BuildingWizardError("Προσθέστε τουλάχιστον ένα διαμέρισμα.", 2)
+    apartments = []
+    apartment_keys = set()
+    apartment_numbers = set()
+    try:
+        for row in apartment_rows:
+            if not isinstance(row, dict):
+                raise ValueError
+            key = _wizard_text(row, "key")
+            apartment_name = _wizard_text(row, "name")
+            number = int(row.get("number"))
+            floor = int(row.get("floor", 0))
+            square_meters = Decimal(str(row.get("square_meters", 0)))
+            if not key or not apartment_name:
+                raise BuildingWizardError(
+                    "Η ονομασία κάθε διαμερίσματος είναι υποχρεωτική.", 2
+                )
+            if key in apartment_keys or number in apartment_numbers:
+                raise BuildingWizardError(
+                    "Οι αριθμοί των διαμερισμάτων πρέπει να είναι μοναδικοί.", 2
+                )
+            if len(apartment_name) > 100:
+                raise BuildingWizardError(
+                    "Η ονομασία διαμερίσματος υπερβαίνει το επιτρεπτό μήκος.", 2
+                )
+            if not square_meters.is_finite() or square_meters < 0:
+                raise BuildingWizardError(
+                    "Τα τετραγωνικά μέτρα πρέπει να είναι μη αρνητικός αριθμός.", 2
+                )
+            owner = _wizard_text(row, "owner")
+            occupant = _wizard_text(row, "occupant")
+            if len(owner) > 100 or len(occupant) > 100:
+                raise BuildingWizardError(
+                    "Τα στοιχεία ιδιοκτήτη ή ενοίκου υπερβαίνουν το επιτρεπτό μήκος.", 2
+                )
+            apartment_keys.add(key)
+            apartment_numbers.add(number)
+            apartments.append(
+                (
+                    key,
+                    Apartment(
+                        name=apartment_name,
+                        number=number,
+                        floor=floor,
+                        square_meters=square_meters,
+                        owner=owner,
+                        occupant=occupant,
+                    ),
+                )
+            )
+    except (TypeError, ValueError, InvalidOperation) as exc:
+        if isinstance(exc, BuildingWizardError):
+            raise
+        raise BuildingWizardError(
+            "Ο αριθμός, ο όροφος και τα τετραγωνικά κάθε διαμερίσματος πρέπει να είναι έγκυροι.",
+            2,
+        ) from exc
+
+    category_rows = payload.get("categories")
+    if not isinstance(category_rows, list) or not category_rows:
+        raise BuildingWizardError("Προσθέστε τουλάχιστον έναν τύπο δαπάνης.", 3)
+    categories = []
+    category_keys = set()
+    category_names = set()
+    for row in category_rows:
+        if not isinstance(row, dict):
+            raise BuildingWizardError("Τα στοιχεία των τύπων δαπανών δεν είναι έγκυρα.", 3)
+        key = _wizard_text(row, "key")
+        category_name = _wizard_text(row, "name")
+        if not key or not category_name:
+            raise BuildingWizardError("Η ονομασία κάθε τύπου δαπάνης είναι υποχρεωτική.", 3)
+        normalized_name = category_name.casefold()
+        if key in category_keys or normalized_name in category_names:
+            raise BuildingWizardError("Οι τύποι δαπανών πρέπει να έχουν μοναδικές ονομασίες.", 3)
+        if len(category_name) > 100:
+            raise BuildingWizardError(
+                "Η ονομασία τύπου δαπάνης υπερβαίνει το επιτρεπτό μήκος.", 3
+            )
+        category_keys.add(key)
+        category_names.add(normalized_name)
+        categories.append((key, ExpenseCategory(name=category_name)))
+
+    matrix = payload.get("millesimals")
+    if not isinstance(matrix, dict):
+        raise BuildingWizardError("Συμπληρώστε τη μήτρα τιμών δαπανών.", 4)
+    expected_apartment_keys = {key for key, _item in apartments}
+    if set(matrix) != category_keys:
+        raise BuildingWizardError("Η μήτρα δεν αντιστοιχεί στους τύπους δαπανών.", 4)
+    raw_values = {}
+    for category_key, _category in categories:
+        column = matrix.get(category_key)
+        if not isinstance(column, dict) or set(column) != expected_apartment_keys:
+            raise BuildingWizardError("Η μήτρα δεν αντιστοιχεί στα διαμερίσματα.", 4)
+        for apartment_key, _apartment in apartments:
+            raw_values[(apartment_key, category_key)] = column[apartment_key]
+
+    building = Building(
+        name=name,
+        address=address,
+        postal_code=postal_code,
+        created_by_id=creator_id,
+    )
+    db.session.add(building)
+    for _key, apartment in apartments:
+        apartment.building = building
+    for _key, category in categories:
+        category.building = building
+    db.session.add_all([item for _key, item in apartments])
+    db.session.add_all([item for _key, item in categories])
+    db.session.flush()
+
+    values = {
+        (apartment.id, category.id): raw_values[(apartment_key, category_key)]
+        for apartment_key, apartment in apartments
+        for category_key, category in categories
+    }
+    try:
+        normalized_values = validate_millesimal_values(
+            [item for _key, item in apartments],
+            [item for _key, item in categories],
+            values,
+        )
+    except ValueError as exc:
+        raise BuildingWizardError(str(exc), 4) from exc
+
+    db.session.add(
+        BuildingMembership(building=building, user_id=creator_id, role="building_admin")
+    )
+    db.session.add_all(
+        Millesimal(apartment_id=apartment_id, category_id=category_id, value=value)
+        for (apartment_id, category_id), value in normalized_values.items()
+    )
+    audit("building_created", creator_id, building.id)
+    return building
+
+
 def validate_millesimal_values(apartments, categories, values):
     if not apartments or not categories:
         raise ValueError("Απαιτείται τουλάχιστον ένα διαμέρισμα και μία κατηγορία.")
@@ -25,8 +198,11 @@ def validate_millesimal_values(apartments, categories, values):
         for apartment in apartments:
             key = (apartment.id, category.id)
             try:
-                value = int(values.get(key, 0))
-            except (TypeError, ValueError) as exc:
+                raw_value = values.get(key, 0)
+                value = int(raw_value)
+                if isinstance(raw_value, bool) or Decimal(str(raw_value)) != value:
+                    raise ValueError
+            except (TypeError, ValueError, InvalidOperation) as exc:
                 raise ValueError("Τα χιλιοστά πρέπει να είναι ακέραιοι αριθμοί.") from exc
             if not 0 <= value <= 1000:
                 raise ValueError("Κάθε τιμή χιλιοστών πρέπει να είναι από 0 έως 1000.")

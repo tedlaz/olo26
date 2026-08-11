@@ -1,10 +1,70 @@
 {% extends "base.html" %}
+{% block title %}Νέο κτίριο | Κοινόχρηστα{% endblock %}
 {% block content %}
-<section class="card narrow"><p class="eyebrow">Νέο ακίνητο</p><h1>Στοιχεία κτιρίου</h1>
-  <form method="post" class="stack">
+<section class="building-wizard" data-building-wizard data-initial-step="{{ initial_step }}">
+  <header class="wizard-heading">
+    <p class="eyebrow">Νέο κτίριο</p>
+    <h1>Δημιουργία κτιρίου</h1>
+    <p>Συμπληρώστε τα τέσσερα βήματα. Τίποτα δεν αποθηκεύεται πριν από την τελική δημιουργία.</p>
+  </header>
+
+  <ol class="wizard-progress" aria-label="Βήματα δημιουργίας">
+    <li><button type="button" data-step-target="1"><span>1</span>Κτίριο</button></li>
+    <li><button type="button" data-step-target="2"><span>2</span>Διαμερίσματα</button></li>
+    <li><button type="button" data-step-target="3"><span>3</span>Τύποι δαπανών</button></li>
+    <li><button type="button" data-step-target="4"><span>4</span>Μήτρα τιμών</button></li>
+  </ol>
+
+  <form method="post" class="card wizard-card" data-wizard-form hx-boost="false" novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Ονομασία<input name="name" required></label><label>Διεύθυνση<input name="address" required></label>
-    <label>ΤΚ<input name="postal_code" required></label><button>Δημιουργία</button>
+    <input type="hidden" name="wizard_payload" data-wizard-payload>
+    <div class="wizard-error" data-wizard-error role="alert" hidden></div>
+
+    <section class="wizard-panel" data-step="1">
+      <p class="eyebrow">Βήμα 1 από 4</p>
+      <h2>Στοιχεία κτιρίου</h2>
+      <div class="wizard-fields">
+        <label>Ονομασία<input data-building-field="name" maxlength="100" autocomplete="organization"></label>
+        <label class="wide-field">Διεύθυνση<input data-building-field="address" maxlength="200" autocomplete="street-address"></label>
+        <label>ΤΚ<input data-building-field="postal_code" maxlength="10" autocomplete="postal-code"></label>
+      </div>
+    </section>
+
+    <section class="wizard-panel" data-step="2" hidden>
+      <div class="wizard-section-head">
+        <div><p class="eyebrow">Βήμα 2 από 4</p><h2>Στοιχεία διαμερισμάτων</h2></div>
+        <button type="button" class="secondary" data-add-apartment>Προσθήκη διαμερίσματος</button>
+      </div>
+      <p class="section-note">Καταχωρίστε όλα τα διαμερίσματα. Ο αριθμός κάθε διαμερίσματος πρέπει να είναι μοναδικός.</p>
+      <div class="wizard-list" data-apartment-list></div>
+    </section>
+
+    <section class="wizard-panel" data-step="3" hidden>
+      <div class="wizard-section-head">
+        <div><p class="eyebrow">Βήμα 3 από 4</p><h2>Τύποι δαπανών</h2></div>
+        <button type="button" class="secondary" data-add-category>Προσθήκη τύπου</button>
+      </div>
+      <p class="section-note">Προσθέστε τις κατηγορίες με τις οποίες θα καταχωρίζονται οι δαπάνες του κτιρίου.</p>
+      <div class="wizard-list category-list" data-category-list></div>
+    </section>
+
+    <section class="wizard-panel" data-step="4" hidden>
+      <p class="eyebrow">Βήμα 4 από 4</p>
+      <h2>Μήτρα τιμών δαπανών</h2>
+      <p class="section-note">Συμπληρώστε τα χιλιοστά κάθε διαμερίσματος. Κάθε στήλη τύπου δαπάνης πρέπει να αθροίζει ακριβώς σε 1000.</p>
+      <div class="table-wrap wizard-matrix-wrap" data-matrix-container></div>
+    </section>
+
+    <footer class="wizard-footer">
+      <a class="button secondary" href="{{ url_for('main.dashboard') }}" data-wizard-cancel>Ακύρωση</a>
+      <div class="actions">
+        <button type="button" class="secondary" data-wizard-previous>Προηγούμενο</button>
+        <button type="button" data-wizard-next>Επόμενο</button>
+        <button type="submit" data-wizard-submit>Έλεγχος και δημιουργία</button>
+      </div>
+    </footer>
   </form>
 </section>
+<script type="application/json" data-wizard-initial>{{ initial_payload|tojson }}</script>
+<script src="{{ url_for('static', filename='building_wizard.js', v=2) }}" defer></script>
 {% endblock %}

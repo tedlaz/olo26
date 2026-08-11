@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
@@ -50,9 +51,11 @@ from .pdf_reports import create_period_report, create_receipts_report
 from .permissions import membership_for, require_role, system_admin_required
 from .security import issue_token, normalize_email
 from .services import (
+    BuildingWizardError,
     allocation_report,
     audit,
     build_allocations,
+    create_building_graph,
     expense_report,
     replace_millesimals,
 )
@@ -147,29 +150,27 @@ def building_create():
     if not (current_user.is_system_admin or current_user.can_create_building):
         abort(403)
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        address = request.form.get("address", "").strip()
-        postal_code = request.form.get("postal_code", "").strip()
-        if not all((name, address, postal_code)):
-            flash("Όλα τα στοιχεία του κτιρίου είναι υποχρεωτικά.", "error")
-        else:
-            building = Building(
-                name=name,
-                address=address,
-                postal_code=postal_code,
-                created_by_id=current_user.id,
-            )
-            db.session.add(building)
-            db.session.flush()
-            db.session.add(
-                BuildingMembership(
-                    building_id=building.id, user_id=current_user.id, role="building_admin"
-                )
-            )
-            audit("building_created", current_user.id, building.id)
+        raw_payload = request.form.get("wizard_payload", "")
+        try:
+            payload = json.loads(raw_payload)
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        try:
+            building = create_building_graph(payload, current_user.id)
             db.session.commit()
+            flash("Το κτίριο δημιουργήθηκε με όλα τα στοιχεία του.", "success")
             return redirect(url_for("main.building_detail", building_id=building.id))
-    return render_template("building_form.html")
+        except BuildingWizardError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template(
+                "building_form.html", initial_payload=payload, initial_step=exc.step
+            )
+        except IntegrityError:
+            db.session.rollback()
+            flash("Δεν δημιουργήθηκε το κτίριο. Ελέγξτε για διπλότυπα στοιχεία.", "error")
+            return render_template("building_form.html", initial_payload=payload, initial_step=2)
+    return render_template("building_form.html", initial_payload=None, initial_step=1)
 
 
 @main.get("/buildings/<int:building_id>")
