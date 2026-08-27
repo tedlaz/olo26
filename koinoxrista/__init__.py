@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from pathlib import Path
 
 import click
@@ -26,6 +27,18 @@ def configured_secret_key():
     if os.environ.get("APP_ENV", "").strip().lower() == "production":
         raise RuntimeError("Production requires SECRET_KEY_FILE or SECRET_KEY.")
     return "dev-only-change-me"
+
+
+def session_lifetime_days(default=30):
+    """How long a login stays valid, in days (SESSION_LIFETIME_DAYS)."""
+    value = os.environ.get("SESSION_LIFETIME_DAYS")
+    if value is None:
+        return default
+    try:
+        days = int(value.strip())
+    except ValueError:
+        return default
+    return days if days > 0 else default
 
 
 def environment_flag(name, default=False):
@@ -100,6 +113,13 @@ def create_app(test_config=None):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=environment_flag("COOKIE_SECURE"),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=session_lifetime_days()),
+        SESSION_REFRESH_EACH_REQUEST=True,
+        REMEMBER_COOKIE_DURATION=timedelta(days=session_lifetime_days()),
+        REMEMBER_COOKIE_HTTPONLY=True,
+        REMEMBER_COOKIE_SAMESITE="Lax",
+        REMEMBER_COOKIE_SECURE=environment_flag("COOKIE_SECURE"),
+        REMEMBER_COOKIE_REFRESH_EACH_REQUEST=True,
         LEGACY_DATABASE=str(Path(app.root_path).parent / "koinoxrista.db"),
         INVITATION_TTL_HOURS=72,
         RESET_TTL_HOURS=2,

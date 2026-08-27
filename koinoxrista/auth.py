@@ -1,4 +1,4 @@
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from .extensions import db
@@ -26,7 +26,8 @@ def login():
         email = normalize_email(request.form.get("email", ""))
         user = db.session.scalar(db.select(User).where(User.email == email))
         if user and user.is_active and user.check_password(request.form.get("password", "")):
-            login_user(user)
+            session.permanent = True
+            login_user(user, remember=True)
             return redirect(
                 url_for("auth.change_password")
                 if user.must_change_password
@@ -60,7 +61,8 @@ def change_password():
             current_user.must_change_password = False
             current_user.auth_version += 1
             db.session.commit()
-            login_user(current_user, fresh=True)
+            session.permanent = True
+            login_user(current_user, remember=True, fresh=True)
             flash("Ο κωδικός άλλαξε.", "success")
             return redirect(url_for("main.dashboard"))
     return render_template("auth/change_password.html")

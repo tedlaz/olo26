@@ -16,6 +16,7 @@ services:
       DATABASE_URL: sqlite:////app/instance/koinoxrista_app.db
       SECRET_KEY_FILE: /app/instance/flask_secret_key
       COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      SESSION_LIFETIME_DAYS: "${SESSION_LIFETIME_DAYS:-30}"
       PDF_FONT_PATH: /usr/share/fonts/dejavu/DejaVuSans.ttf
       PDF_FONT_BOLD_PATH: /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
     volumes:
