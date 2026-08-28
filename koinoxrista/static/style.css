@@ -86,6 +86,9 @@
 html {
   min-height: 100%;
   scroll-behavior: smooth;
+  /* Global type scale: shrinks every rem-based size (text, spacing, controls)
+     so dense screens fit without horizontal scrollbars. */
+  font-size: 87.5%;
 }
 
 body {
