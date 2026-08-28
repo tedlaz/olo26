@@ -3,11 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b2633">
+  <meta name="theme-color" content="#16191d">
   <title>{% block title %}Κοινόχρηστα{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=3) }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=4) }}">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-  <script src="{{ url_for('static', filename='app.js', v=3) }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js', v=4) }}" defer></script>
 </head>
 <body hx-boost="true">
   <header class="topbar">
