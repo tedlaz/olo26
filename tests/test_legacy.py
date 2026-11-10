@@ -62,9 +62,7 @@ def test_legacy_import_preserves_source_and_imports_all(app):
             == 2
         )
         first_period = db.session.scalar(db.select(Period).order_by(Period.issue_date))
-        assert period_reference(first_period) == (
-            "Περίοδος: Κανονικά και αγορά πετρελαίου 15/3/2008 (No: 1)"
-        )
+        assert period_reference(first_period) == ("15/03/2008 · Κανονικά και αγορά πετρελαίου")
         report = allocation_report(first_period)
         assert len(report["categories"]) == 4
         assert len(report["rows"]) == 6

@@ -90,7 +90,7 @@ def test_migration_numbers_existing_periods_per_building_in_creation_order(app):
 
 
 def test_period_page_and_pdf_show_building_number(app, client):
-    from koinoxrista.pdf_reports import period_reference
+    from koinoxrista.pdf_reports import period_reference, report_title
 
     with app.app_context():
         admin = db.session.scalar(db.select(User))
@@ -102,7 +102,8 @@ def test_period_page_and_pdf_show_building_number(app, client):
         db.session.add(period)
         db.session.commit()
         assert period.id == 2 and period.number == 1
-        assert period_reference(period).endswith("(No: 1)")
+        assert period_reference(period) == "31/01/2026 · Ιανουάριος"
+        assert report_title(period) == "Κοινόχρηστα 1 Ιανουάριος 2026"
         building_id, period_id = second.id, period.id
 
     client.post("/auth/login", data={"email": "admin@admin.app", "password": "changeme"})
