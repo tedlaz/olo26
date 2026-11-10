@@ -13,7 +13,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Ημ/νία</th><th>Κίνηση</th><th class="numeric">Δαπάνη</th><th class="numeric">Πληρωμή</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
     <tbody>
-      {% for row in rows %}
+      {% for row in rows|reverse %}
       {% set expense = row.expense %}
       {% if not row.payment %}
       <tr><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td>{{ expense.description }} · παρ/κό {{ expense.invoice_number }} · <a href="{{ url_for('main.period_detail', period_id=expense.period_id) }}">Περίοδος No {{ expense.period.number }}</a></td><td class="numeric">{{ '%.2f'|format(row.charge) }} €</td><td></td><td class="numeric">{{ '%.2f'|format(row.balance) }} €</td>

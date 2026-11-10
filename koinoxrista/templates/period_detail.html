@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "_modal.html" import modal %}
-{% block title %}Περίοδος {{ period.issue_date }}{% endblock %}
+{% block title %}Περίοδος No {{ period.number }} · {{ period.issue_date.strftime('%d/%m/%Y') }}{% endblock %}
 {% block content %}
 <div class="page-head period-head">
   <div>

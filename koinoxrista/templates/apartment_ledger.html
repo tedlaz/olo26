@@ -18,8 +18,7 @@
   <div class="table-wrap"><table>
     <thead><tr><th>Ημ/νία</th><th>Κίνηση</th><th class="numeric">Χρέωση</th><th class="numeric">Είσπραξη</th><th class="numeric">Υπόλοιπο</th><th class="numeric">Αποθεματικό</th><th></th></tr></thead>
     <tbody>
-      <tr><td>{{ building.ledger_start_date.strftime('%d/%m/%Y') }}</td><td>Αρχικά υπόλοιπα</td><td></td><td></td><td class="numeric">{{ '%.2f'|format(apartment.opening_balance) }} €</td><td class="numeric">{{ '%.2f'|format(apartment.opening_reserve) }} €</td><td></td></tr>
-      {% for row in rows %}
+      {% for row in rows|reverse %}
       {% if row.period %}
       <tr><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td><a href="{{ url_for('main.period_detail', period_id=row.period.id) }}">Κοινόχρηστα No {{ row.period.number }}</a></td><td class="numeric">{{ '%.2f'|format(row.charge) }} €</td><td></td><td class="numeric">{{ '%.2f'|format(row.balance) }} €</td><td class="numeric">{{ '%.2f'|format(row.reserve) }} €</td><td></td></tr>
       {% else %}
@@ -28,6 +27,7 @@
         <td class="numeric"><a class="expense-action-badge" href="{{ url_for('main.cash_entry_receipt_pdf', entry_id=entry.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% if not entry.voided_at %} <button type="button" class="expense-action-badge" data-open="dlg-void-{{ entry.id }}">Ακύρωση</button>{% endif %}</td></tr>
       {% endif %}
       {% endfor %}
+      <tr><td>{{ building.ledger_start_date.strftime('%d/%m/%Y') }}</td><td>Αρχικά υπόλοιπα</td><td></td><td></td><td class="numeric">{{ '%.2f'|format(apartment.opening_balance) }} €</td><td class="numeric">{{ '%.2f'|format(apartment.opening_reserve) }} €</td><td></td></tr>
     </tbody>
   </table></div>
   <p>Θετικό υπόλοιπο σημαίνει οφειλή, αρνητικό πίστωση.</p>

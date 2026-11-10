@@ -475,6 +475,30 @@ h3 {
   margin: -16px 0 14px;
 }
 
+/* Back link and page heading share one row when they are adjacent (stacked on phones). */
+@media (min-width: 761px) {
+  .shell:has(> .back-navigation + .page-head) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 18px;
+  }
+
+  .shell:has(> .back-navigation + .page-head) > * {
+    grid-column: 1 / -1;
+  }
+
+  .shell:has(> .back-navigation + .page-head) > .back-navigation {
+    grid-column: 1;
+    align-self: center;
+    margin: 0 0 24px;
+  }
+
+  .shell:has(> .back-navigation + .page-head) > .page-head {
+    grid-column: 2;
+    align-items: center;
+  }
+}
+
 .back-navigation a {
   display: inline-flex;
   align-items: center;
@@ -490,7 +514,7 @@ h3 {
   backdrop-filter: blur(10px);
 }
 
-.back-navigation a span {
+.back-navigation a > span[aria-hidden="true"] {
   display: grid;
   width: 24px;
   height: 24px;
@@ -510,7 +534,7 @@ h3 {
   transform: translateX(-2px);
 }
 
-.back-navigation a:hover span {
+.back-navigation a:hover > span[aria-hidden="true"] {
   transform: translateX(-2px);
 }
 
@@ -2451,32 +2475,42 @@ dialog.modal .stack > .span-2 {
 /* Building tabs */
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 20px;
+  /* horizontal scroll on narrow screens only; never a vertical scrollbar */
   overflow-x: auto;
-  border-bottom: 1px solid var(--line);
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  /* baseline drawn as a shadow so the active underline needs no negative margin */
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 
 .tab {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  color: var(--muted);
+  padding: 11px 18px 10px;
+  border: 1px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-radius: 10px 10px 0 0;
+  color: var(--ink);
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+  opacity: 0.78;
 }
 
 .tab:hover {
-  color: var(--ink);
+  background: var(--surface-soft);
+  opacity: 1;
 }
 
 .tab.active {
-  border-bottom-color: var(--primary);
+  border-color: var(--primary-line) var(--primary-line) var(--primary);
+  background: var(--primary-soft);
   color: var(--primary);
+  font-weight: 700;
+  opacity: 1;
 }
 
 .tab-count {
@@ -2485,6 +2519,11 @@ dialog.modal .stack > .span-2 {
   background: var(--line);
   color: var(--ink);
   font-size: 0.75rem;
+}
+
+.tab.active .tab-count {
+  background: var(--primary);
+  color: #fff;
 }
 
 /* ==========================================================================

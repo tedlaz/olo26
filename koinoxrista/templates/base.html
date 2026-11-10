@@ -45,7 +45,7 @@
   <main class="shell">
     {% if back_navigation %}
       <nav class="back-navigation" aria-label="Επιστροφή στην προηγούμενη ενότητα">
-        <a href="{{ back_navigation.url }}"><span aria-hidden="true">&larr;</span> {{ back_navigation.label }}</a>
+        <a href="{{ back_navigation.url }}" data-back-link hx-boost="false"><span aria-hidden="true">&larr;</span> <span data-back-label>{{ back_navigation.label }}</span></a>
       </nav>
     {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}

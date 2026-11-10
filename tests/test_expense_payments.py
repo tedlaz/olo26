@@ -356,3 +356,20 @@ def test_payee_card_shows_expenses_payments_and_balance(app, client):
     assert "Πίσω στο Κτίριο" in card.text
     payees = client.get(f"/buildings/{building_id}?tab=payees").text
     assert f"/payees/{payee_id}/ledger" in payees and "60.00 €" in payees
+
+
+def test_payee_card_lists_newest_first(app, client):
+    building_id = make_building(app)
+    with app.app_context():
+        building = db.session.get(Building, building_id)
+        building.opening_cash = D("40.00")
+        _draft, bill = draft_with_bill(building, "100.00")
+        pay(building, bill, date(2026, 1, 12), "10.00", 1)
+        pay(building, bill, date(2026, 1, 20), "10.00", 2)
+        payee_id = bill.payee_id
+    login(client)
+    card = client.get(f"/payees/{payee_id}/ledger").text
+    newer, older, expense = (
+        card.index(x) for x in ("Απόδειξη πληρωμής αρ. 2", "Απόδειξη πληρωμής αρ. 1", "παρ/κό")
+    )
+    assert newer < older < expense

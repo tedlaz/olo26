@@ -43,8 +43,84 @@
     });
   }
 
+  // Back link: returns to the screen that opened this one. Screens are kept per browser tab
+  // (sessionStorage); a screen is its path, so switching tabs (?tab=…) or a form reloading
+  // the same page is not a new screen. Without history the server-rendered link stays.
+  // Returning to the screen below the top restores where it was scrolled to.
+  function nextScreens(stack, here) {
+    const top = stack[stack.length - 1];
+    if (top && top.path === here.path) return { stack: stack.slice(0, -1).concat([here]) };
+    const previous = stack[stack.length - 2];
+    if (previous && previous.path === here.path) {
+      return { stack: stack.slice(0, -2).concat([here]), scroll: previous.scroll || 0 };
+    }
+    return { stack: stack.concat([here]).slice(-50) };
+  }
+
+  function loadScreens() {
+    try {
+      return JSON.parse(sessionStorage.getItem("screens")) || [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveScreens(stack) {
+    try {
+      sessionStorage.setItem("screens", JSON.stringify(stack));
+    } catch (error) {
+      // storage blocked: the server-rendered link stays
+    }
+  }
+
+  function trackScreen() {
+    const here = {
+      path: location.pathname,
+      url: location.pathname + location.search,
+      title: document.title,
+      scroll: 0,
+    };
+    const result = nextScreens(loadScreens(), here);
+    saveScreens(result.stack);
+    if (result.scroll) {
+      // after htmx's own scroll-to-top of the swapped page
+      requestAnimationFrame(function () {
+        window.scrollTo({ top: result.scroll, behavior: "instant" });
+      });
+    }
+    const link = document.querySelector("a[data-back-link]");
+    const previous = result.stack[result.stack.length - 2];
+    if (!link || !previous) return;
+    link.href = previous.url;
+    link.querySelector("[data-back-label]").textContent = "Πίσω: " + previous.title;
+  }
+
+  // remember the scroll position of the current screen
+  let scrollPending = false;
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (scrollPending) return;
+      scrollPending = true;
+      setTimeout(function () {
+        scrollPending = false;
+        const stack = loadScreens();
+        const top = stack[stack.length - 1];
+        if (!top || top.path !== location.pathname) return;
+        top.scroll = Math.round(window.scrollY);
+        saveScreens(stack);
+      }, 150);
+    },
+    { passive: true },
+  );
+
   document.addEventListener("DOMContentLoaded", function () {
     greekDates(document);
+    trackScreen();
+  });
+  // boosted navigation swaps <body>; Back/Forward restores a snapshot
+  document.addEventListener("htmx:afterSettle", function (event) {
+    if (event.detail.elt === document.body) trackScreen();
   });
   document.addEventListener("htmx:load", function (event) {
     greekDates(event.detail.elt);
@@ -57,6 +133,7 @@
   });
   document.addEventListener("htmx:historyRestore", function () {
     greekDates(document);
+    trackScreen();
   });
 
   // Millesimal matrix: live column total and remainder up to 1000 (first paint is server-rendered).

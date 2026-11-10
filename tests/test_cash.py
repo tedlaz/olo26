@@ -270,3 +270,16 @@ def test_reserves_form_sets_opening_reserve_only(app, client):
         first, second = apartments(building_id)
         assert apartment_position(first) == (D("10.00"), D("15.00"))  # balance untouched
         assert apartment_position(second)[1] == D("10.00")
+
+
+def test_ledger_cards_list_newest_first(app, client):
+    building_id = make_building(app)
+    with app.app_context():
+        first = apartments(building_id)[0]
+        add_entry(building_id, first, "collection", date(2026, 1, 5), "3.00", 1)
+        add_entry(building_id, first, "collection", date(2026, 2, 5), "4.00", 2)
+        first_id = first.id
+    login(client)
+    card = client.get(f"/apartments/{first_id}/ledger").text
+    newer, older, opening = (card.index(x) for x in ("Αρ. 2 ·", "Αρ. 1 ·", "Αρχικά υπόλοιπα"))
+    assert newer < older < opening
