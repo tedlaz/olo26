@@ -90,6 +90,9 @@ class Building(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     legacy_imported_at = db.Column(db.DateTime)
     legacy_source_hash = db.Column(db.String(64), unique=True)
+    # Cash ledger starts here; earlier periods are covered by the apartments' opening balances.
+    ledger_start_date = db.Column(db.Date)
+    opening_cash = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
 
     apartments = db.relationship(
         "Apartment", back_populates="building", cascade="all, delete-orphan"
@@ -146,6 +149,9 @@ class Apartment(db.Model):
     owner = db.Column(db.String(100), nullable=False, default="")
     occupant = db.Column(db.String(100), nullable=False, default="")
     legacy_id = db.Column(db.Integer)
+    # Balances on Building.ledger_start_date. Positive balance = the apartment owes.
+    opening_balance = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    opening_reserve = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
 
     building = db.relationship("Building", back_populates="apartments")
 
@@ -170,6 +176,19 @@ class ExpenseCategory(db.Model):
     legacy_id = db.Column(db.Integer)
 
     building = db.relationship("Building", back_populates="categories")
+
+
+class Payee(db.Model):
+    """Who gets paid for an expense (supplier, utility, worker), per building."""
+
+    __tablename__ = "payees"
+    __table_args__ = (UniqueConstraint("building_id", "name"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    building_id = db.Column(db.ForeignKey("buildings.id"), nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False)
+
+    building = db.relationship("Building")
 
 
 class Millesimal(db.Model):
@@ -231,10 +250,21 @@ class Expense(db.Model):
     invoice_number = db.Column(db.String(30), nullable=False)
     description = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
+    payee_id = db.Column(db.ForeignKey("payees.id"), index=True)
+    # Suggested again in the next period (monthly cleaning, elevator service, ...).
+    recurring = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
     legacy_id = db.Column(db.Integer)
 
     period = db.relationship("Period", back_populates="expenses")
     category = db.relationship("ExpenseCategory")
+    payee = db.relationship("Payee")
+    payments = db.relationship("ExpensePayment", back_populates="expense")
+
+    @property
+    def paid(self):
+        return sum(
+            (payment.amount for payment in self.payments if not payment.voided_at), Decimal("0")
+        )
 
 
 class Allocation(db.Model):
@@ -255,6 +285,75 @@ class Allocation(db.Model):
     period = db.relationship("Period", back_populates="allocations")
     apartment = db.relationship("Apartment")
     category = db.relationship("ExpenseCategory")
+
+
+class CashEntry(db.Model):
+    """A numbered cash movement of an apartment. Voided, never deleted."""
+
+    __tablename__ = "cash_entries"
+    __table_args__ = (
+        UniqueConstraint("building_id", "number", name="uq_cash_entries_building_number"),
+        CheckConstraint(
+            "kind IN ('collection', 'reserve_in', 'reserve_out')", name="valid_cash_entry_kind"
+        ),
+        CheckConstraint("amount > 0", name="positive_cash_entry_amount"),
+    )
+
+    KINDS = {
+        "collection": "Είσπραξη κοινοχρήστων",
+        "reserve_in": "Κατάθεση αποθεματικού",
+        "reserve_out": "Επιστροφή αποθεματικού",
+    }
+
+    id = db.Column(db.Integer, primary_key=True)
+    building_id = db.Column(db.ForeignKey("buildings.id"), nullable=False, index=True)
+    apartment_id = db.Column(db.ForeignKey("apartments.id"), nullable=False, index=True)
+    number = db.Column(db.Integer, nullable=False)
+    kind = db.Column(db.String(20), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    party_name = db.Column(db.String(100), nullable=False, default="")
+    notes = db.Column(db.String(200), nullable=False, default="")
+    created_by_id = db.Column(db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    voided_at = db.Column(db.DateTime)
+    void_reason = db.Column(db.String(200), nullable=False, default="")
+
+    building = db.relationship("Building")
+    apartment = db.relationship("Apartment")
+
+    @property
+    def kind_label(self):
+        return self.KINDS[self.kind]
+
+
+class ExpensePayment(db.Model):
+    """A numbered (own series) payment of an expense, possibly one of several instalments."""
+
+    __tablename__ = "expense_payments"
+    __table_args__ = (
+        UniqueConstraint("building_id", "number", name="uq_expense_payments_building_number"),
+        CheckConstraint("amount > 0", name="positive_expense_payment_amount"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    building_id = db.Column(db.ForeignKey("buildings.id"), nullable=False, index=True)
+    expense_id = db.Column(db.ForeignKey("expenses.id"), nullable=False, index=True)
+    # Set when an apartment paid the payee directly: the receipt that credits the apartment.
+    cash_entry_id = db.Column(db.ForeignKey("cash_entries.id"))
+    number = db.Column(db.Integer, nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    payee = db.Column(db.String(100), nullable=False, default="")
+    notes = db.Column(db.String(200), nullable=False, default="")
+    created_by_id = db.Column(db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    voided_at = db.Column(db.DateTime)
+    void_reason = db.Column(db.String(200), nullable=False, default="")
+
+    building = db.relationship("Building")
+    expense = db.relationship("Expense", back_populates="payments")
+    cash_entry = db.relationship("CashEntry", backref=db.backref("covered_payment", uselist=False))
 
 
 class AuditLog(db.Model):

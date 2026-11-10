@@ -38,29 +38,52 @@ from .models import (
     Apartment,
     Building,
     BuildingMembership,
+    CashEntry,
     Expense,
     ExpenseCategory,
+    ExpensePayment,
     Invitation,
     ManagerTerm,
     Millesimal,
     PasswordResetToken,
+    Payee,
     Period,
     User,
     utcnow,
 )
-from .pdf_reports import create_period_report, create_receipts_report
+from .pdf_reports import (
+    create_cash_receipt,
+    create_payment_notices,
+    create_payment_receipt,
+    create_period_report,
+    create_receipts_report,
+)
 from .permissions import membership_for, require_role, system_admin_required
 from .security import issue_token, normalize_email
 from .services import (
     BuildingWizardError,
     allocation_report,
+    apartment_ledger,
+    apartment_position,
     audit,
     build_allocations,
+    cash_book,
+    cash_report,
     compute_allocations,
     create_building_graph,
     delete_building,
+    expense_in_ledger,
     expense_report,
+    ledger_summary,
+    manager_on,
+    next_cash_entry_number,
+    next_payment_number,
+    payee_balance,
+    payee_ledger,
+    period_in_ledger,
+    recurring_suggestions,
     replace_millesimals,
+    require_cash,
 )
 
 main = Blueprint("main", __name__)
@@ -229,8 +252,26 @@ def building_detail(building_id):
         .order_by(ManagerTerm.date_from.desc())
     ).all()
     eligible_users = manager_candidates(building.id)
+    cash = None
+    if role == "admin" and request.args.get("tab") == "cash":
+        cash = ledger_summary(building)
+        cash["report"] = cash_report(building)
+        # ponytail: whole book in memory, newest 50 shown; paginate if a building outgrows it
+        cash["book"] = list(reversed(cash_book(building)))[:50]
+        cash["new_payment"] = db.session.scalar(
+            db.select(ExpensePayment).where(
+                ExpensePayment.id == request.args.get("new_payment", 0, type=int),
+                ExpensePayment.building_id == building.id,
+            )
+        )
+    payees = building_payees(building.id)
     return render_template(
         "building_detail.html",
+        cash=cash,
+        payees=payees,
+        payee_balances={payee.id: payee_balance(payee) for payee in payees}
+        if role == "admin" and request.args.get("tab") == "payees"
+        else {},
         building=building,
         periods=periods_pagination.items,
         periods_pagination=periods_pagination,
@@ -487,13 +528,7 @@ def period_create(building_id):
     if request.method == "POST":
         try:
             issue_date = parse_date(request.form.get("issue_date"), "ημερομηνία έκδοσης")
-            manager = db.session.scalar(
-                db.select(ManagerTerm).where(
-                    ManagerTerm.building_id == building.id,
-                    ManagerTerm.date_from <= issue_date,
-                    or_(ManagerTerm.date_to.is_(None), ManagerTerm.date_to >= issue_date),
-                )
-            )
+            manager = manager_on(building.id, issue_date)
             if not manager:
                 raise ValueError("Δεν υπάρχει ενεργός διαχειριστής για αυτή την ημερομηνία.")
             period = Period(
@@ -524,13 +559,7 @@ def period_edit(period_id):
     if request.method == "POST":
         try:
             issue_date = parse_date(request.form.get("issue_date"), "ημερομηνία έκδοσης")
-            manager = db.session.scalar(
-                db.select(ManagerTerm).where(
-                    ManagerTerm.building_id == period.building_id,
-                    ManagerTerm.date_from <= issue_date,
-                    or_(ManagerTerm.date_to.is_(None), ManagerTerm.date_to >= issue_date),
-                )
-            )
+            manager = manager_on(period.building_id, issue_date)
             if not manager:
                 raise ValueError("Δεν υπάρχει ενεργός διαχειριστής για αυτή την ημερομηνία.")
             period.issue_date = issue_date
@@ -567,6 +596,19 @@ def period_detail(period_id):
         period=period,
         role=role,
         expense_report=expense_report(period),
+        payees=building_payees(period.building_id),
+        cash_active=role == "admin" and period_in_ledger(period),
+        recurring=recurring_suggestions(period)
+        if role == "admin" and period.status == "draft"
+        else (None, []),
+        new_payment=db.session.scalar(
+            db.select(ExpensePayment)
+            .join(ExpensePayment.expense)
+            .where(
+                ExpensePayment.id == request.args.get("new_payment", 0, type=int),
+                Expense.period_id == period.id,
+            )
+        ),
         allocation_report=report,
         allocation_error=allocation_error,
     )
@@ -604,6 +646,517 @@ def period_receipts_pdf(period_id):
     )
 
 
+@main.get("/periods/<int:period_id>/notices.pdf")
+@login_required
+def period_notices_pdf(period_id):
+    period = finalized_period_for_report(period_id)
+    return send_file(
+        BytesIO(create_payment_notices(period)),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"eidopoiiseis-{period.issue_date.isoformat()}.pdf",
+    )
+
+
+def parse_amount(value, label):
+    amount = Decimal(value.strip().replace(",", ".") or "0").quantize(Decimal("0.01"))
+    if not amount.is_finite():
+        raise ValueError(f"Μη έγκυρο ποσό: {label}.")
+    return amount
+
+
+@main.route("/buildings/<int:building_id>/cash/setup", methods=["GET", "POST"])
+@login_required
+def cash_setup(building_id):
+    building = get_building(building_id, "admin")
+    apartments = sorted(building.apartments, key=lambda item: (item.number, item.id))
+    if request.method == "POST":
+        try:
+            building.ledger_start_date = parse_date(
+                request.form.get("ledger_start_date"), "ημερομηνία έναρξης"
+            )
+            building.opening_cash = parse_amount(
+                request.form.get("opening_cash", "0"), "αρχικό ταμείο"
+            )
+            if building.opening_cash < 0:
+                raise ValueError("Τα αρχικά μετρητά δεν μπορεί να είναι αρνητικά.")
+            for apartment in apartments:
+                label = apartment.display_label()
+                apartment.opening_balance = parse_amount(
+                    request.form.get(f"balance_{apartment.id}", "0"), label
+                )
+            require_cash(building)
+            audit(
+                "cash_setup_updated",
+                current_user.id,
+                building.id,
+                building.ledger_start_date.isoformat(),
+            )
+            db.session.commit()
+            flash("Τα αρχικά υπόλοιπα του ταμείου αποθηκεύτηκαν.", "success")
+            return redirect(url_for("main.building_detail", building_id=building.id, tab="cash"))
+        except (ValueError, InvalidOperation) as exc:
+            db.session.rollback()
+            flash(f"Δεν αποθηκεύτηκαν τα υπόλοιπα: {form_error(exc, '')}", "error")
+    return render_template("cash_setup.html", building=building, apartments=apartments)
+
+
+@main.route("/buildings/<int:building_id>/cash/reserves", methods=["GET", "POST"])
+@login_required
+def cash_reserves(building_id):
+    building = get_building(building_id, "admin")
+    if building.ledger_start_date is None:
+        abort(409, description="Ορίστε πρώτα την έναρξη του ταμείου.")
+    apartments = sorted(building.apartments, key=lambda item: (item.number, item.id))
+    if request.method == "POST":
+        try:
+            for apartment in apartments:
+                label = apartment.display_label()
+                reserve = parse_amount(request.form.get(f"reserve_{apartment.id}", "0"), label)
+                if reserve < 0:
+                    raise ValueError(f"Το αποθεματικό δεν μπορεί να είναι αρνητικό: {label}.")
+                apartment.opening_reserve = reserve
+                if apartment_position(apartment)[1] < 0:
+                    raise ValueError(
+                        f"Μετά τις επιστροφές το αποθεματικό θα γινόταν αρνητικό: {label}."
+                    )
+            audit("cash_reserves_updated", current_user.id, building.id)
+            db.session.commit()
+            flash("Το αρχικό αποθεματικό αποθηκεύτηκε.", "success")
+            return redirect(url_for("main.building_detail", building_id=building.id, tab="cash"))
+        except (ValueError, InvalidOperation) as exc:
+            db.session.rollback()
+            flash(f"Δεν αποθηκεύτηκε το αποθεματικό: {form_error(exc, '')}", "error")
+    return render_template(
+        "cash_reserves.html",
+        building=building,
+        rows=[(apartment, apartment_position(apartment)[1]) for apartment in apartments],
+    )
+
+
+@main.route("/buildings/<int:building_id>/cash/new", methods=["GET", "POST"])
+@login_required
+def cash_entry_new(building_id):
+    building = get_building(building_id, "admin")
+    if building.ledger_start_date is None:
+        abort(409, description="Ορίστε πρώτα την έναρξη του ταμείου.")
+    apartments = sorted(building.apartments, key=lambda item: (item.number, item.id))
+    if request.method == "POST":
+        try:
+            apartment = next(
+                (
+                    item
+                    for item in apartments
+                    if str(item.id) == request.form.get("apartment_id", "")
+                ),
+                None,
+            )
+            if apartment is None:
+                raise ValueError("Επιλέξτε διαμέρισμα.")
+            kind = request.form.get("kind", "")
+            if kind not in CashEntry.KINDS:
+                raise ValueError("Επιλέξτε είδος κίνησης.")
+            entry_date = parse_date(request.form.get("date"))
+            if entry_date < building.ledger_start_date:
+                raise ValueError("Η ημερομηνία είναι πριν την έναρξη του ταμείου.")
+            amount = parse_amount(request.form.get("amount", ""), "ποσό")
+            if amount <= 0:
+                raise ValueError("Το ποσό πρέπει να είναι θετικό.")
+            if kind == "reserve_out":
+                if amount > apartment_position(apartment)[1]:
+                    raise ValueError("Το ποσό ξεπερνά το αποθεματικό του διαμερίσματος.")
+                require_cash(building, add=(entry_date, -amount))
+            entry = CashEntry(
+                building=building,
+                apartment=apartment,
+                number=next_cash_entry_number(building),
+                kind=kind,
+                date=entry_date,
+                amount=amount,
+                party_name=request.form.get("party_name", "").strip()[:100],
+                notes=request.form.get("notes", "").strip()[:200],
+                created_by_id=current_user.id,
+            )
+            db.session.add(entry)
+            db.session.flush()
+            audit(
+                "cash_entry_added",
+                current_user.id,
+                building.id,
+                f"{entry.number} · {kind} · {amount}",
+            )
+            db.session.commit()
+            flash(f"Καταχωρήθηκε η απόδειξη αρ. {entry.number}.", "success")
+            return redirect(
+                url_for("main.apartment_ledger_view", apartment_id=apartment.id, new=entry.id)
+            )
+        except (ValueError, InvalidOperation, IntegrityError) as exc:
+            db.session.rollback()
+            message = form_error(exc, "Ο αριθμός απόδειξης δόθηκε ήδη. Δοκιμάστε ξανά.")
+            flash(f"Δεν καταχωρήθηκε η κίνηση: {message}", "error")
+    selected = request.form.get("apartment_id") or request.args.get("apartment_id", "")
+    suggested = {str(item.id): f"{max(apartment_position(item)[0], 0):.2f}" for item in apartments}
+    return render_template(
+        "cash_entry_form.html",
+        building=building,
+        apartments=apartments,
+        selected=selected,
+        suggested=suggested,
+        kinds=CashEntry.KINDS,
+        today=date.today(),
+    )
+
+
+@main.get("/apartments/<int:apartment_id>/ledger")
+@login_required
+def apartment_ledger_view(apartment_id):
+    apartment = db.get_or_404(Apartment, apartment_id)
+    require_role(apartment.building_id, "admin")
+    new_entry = db.session.get(CashEntry, request.args.get("new", 0, type=int))
+    if new_entry is not None and new_entry.apartment_id != apartment.id:
+        new_entry = None
+    return render_template(
+        "apartment_ledger.html",
+        apartment=apartment,
+        building=apartment.building,
+        rows=apartment_ledger(apartment),
+        new_entry=new_entry,
+    )
+
+
+def cash_entry_for_admin(entry_id):
+    entry = db.get_or_404(CashEntry, entry_id)
+    require_role(entry.building_id, "admin")
+    return entry
+
+
+@main.get("/cash-entries/<int:entry_id>/receipt.pdf")
+@login_required
+def cash_entry_receipt_pdf(entry_id):
+    entry = cash_entry_for_admin(entry_id)
+    return send_file(
+        BytesIO(create_cash_receipt(entry)),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"apodeixi-{entry.number}.pdf",
+    )
+
+
+@main.post("/cash-entries/<int:entry_id>/void")
+@login_required
+def cash_entry_void(entry_id):
+    entry = cash_entry_for_admin(entry_id)
+    reason = request.form.get("reason", "").strip()[:200]
+    linked = (
+        entry.covered_payment
+        if entry.covered_payment and not entry.covered_payment.voided_at
+        else None
+    )
+    try:
+        if entry.kind != "reserve_out" and linked is None:
+            require_cash(entry.building, skip=entry)
+        blocked = None
+    except ValueError as exc:
+        blocked = str(exc)
+    if entry.voided_at:
+        flash("Η απόδειξη είναι ήδη ακυρωμένη.", "error")
+    elif not reason:
+        flash("Γράψτε τον λόγο ακύρωσης.", "error")
+    elif blocked:
+        flash(f"Η απόδειξη δεν ακυρώνεται. {blocked}", "error")
+    else:
+        entry.voided_at = utcnow()
+        entry.void_reason = reason
+        if linked:
+            linked.voided_at, linked.void_reason = entry.voided_at, reason
+            flash(f"Ακυρώθηκε μαζί και η πληρωμή δαπάνης αρ. {linked.number}.", "success")
+        audit("cash_entry_voided", current_user.id, entry.building_id, f"{entry.number} · {reason}")
+        db.session.commit()
+        flash(f"Η απόδειξη αρ. {entry.number} ακυρώθηκε.", "success")
+    return redirect(url_for("main.apartment_ledger_view", apartment_id=entry.apartment_id))
+
+
+def record_payment(building, expense, payment_date, amount, notes, paid_by=None):
+    """Validate and add a payment of the expense (caller commits).
+
+    paid_by: an apartment that paid the payee out of pocket. That is booked as the apartment
+    paying the fund (a receipt crediting its card) and the fund paying the payee, same day:
+    cash is unchanged, the expense is settled and the apartment gets the credit.
+    """
+    if payment_date < building.ledger_start_date:
+        raise ValueError("Η ημερομηνία πληρωμής είναι πριν την έναρξη του ταμείου.")
+    if amount <= 0:
+        raise ValueError("Το ποσό πληρωμής πρέπει να είναι θετικό.")
+    outstanding = expense.amount - expense.paid
+    if amount > outstanding:
+        raise ValueError(f"Το ποσό ξεπερνά το υπόλοιπο της δαπάνης ({outstanding} €).")
+    entry = None
+    if paid_by is not None:
+        entry = CashEntry(
+            building=building,
+            apartment=paid_by,
+            number=next_cash_entry_number(building),
+            kind="collection",
+            date=payment_date,
+            amount=amount,
+            party_name=paid_by.occupant or paid_by.owner,
+            notes=f"Πλήρωσε «{expense.description}» στον/στην {expense.payee.name}"[:200],
+            created_by_id=current_user.id,
+        )
+        db.session.add(entry)
+        db.session.flush()
+        notes = notes or f"Πληρώθηκε από {paid_by.display_label()} (είσπραξη αρ. {entry.number})"
+    require_cash(building, add=(payment_date, -amount))
+    payment = ExpensePayment(
+        building=building,
+        expense=expense,
+        cash_entry=entry,
+        number=next_payment_number(building),
+        date=payment_date,
+        amount=amount,
+        payee=expense.payee.name,
+        notes=notes,
+        created_by_id=current_user.id,
+    )
+    db.session.add(payment)
+    db.session.flush()
+    audit(
+        "expense_paid",
+        current_user.id,
+        building.id,
+        f"{payment.number} · δαπάνη {expense.id} · {amount}",
+    )
+    return payment
+
+
+@main.route("/expenses/<int:expense_id>/pay", methods=["GET", "POST"])
+@login_required
+def expense_pay(expense_id):
+    expense = db.get_or_404(Expense, expense_id)
+    building = get_building(expense.period.building_id, "admin")
+    if not expense_in_ledger(expense):
+        abort(409, description="Η δαπάνη δεν ανήκει σε περίοδο του ταμείου.")
+    outstanding = expense.amount - expense.paid
+    if request.method == "POST":
+        try:
+            if expense.payee is None:
+                expense.payee = payee_from_form(building.id)
+            payment = record_payment(
+                building,
+                expense,
+                parse_date(request.form.get("date")),
+                parse_amount(request.form.get("amount", ""), "ποσό"),
+                request.form.get("notes", "").strip()[:200],
+                paid_by=apartment_from_form(building),
+            )
+            db.session.commit()
+            flash(f"Καταχωρήθηκε η πληρωμή αρ. {payment.number}.", "success")
+            return redirect(
+                url_for(
+                    "main.building_detail",
+                    building_id=building.id,
+                    tab="cash",
+                    new_payment=payment.id,
+                )
+            )
+        except (ValueError, InvalidOperation, IntegrityError) as exc:
+            db.session.rollback()
+            message = form_error(exc, "Ο αριθμός πληρωμής δόθηκε ήδη. Δοκιμάστε ξανά.")
+            flash(f"Δεν καταχωρήθηκε η πληρωμή: {message}", "error")
+    return render_template(
+        "expense_payment_form.html",
+        apartments=sorted(building.apartments, key=lambda item: (item.number, item.id)),
+        expense=expense,
+        payees=building_payees(building.id),
+        building=building,
+        outstanding=outstanding,
+        today=date.today(),
+    )
+
+
+def payment_for_admin(payment_id):
+    payment = db.get_or_404(ExpensePayment, payment_id)
+    require_role(payment.building_id, "admin")
+    return payment
+
+
+@main.get("/expense-payments/<int:payment_id>/receipt.pdf")
+@login_required
+def expense_payment_receipt_pdf(payment_id):
+    payment = payment_for_admin(payment_id)
+    return send_file(
+        BytesIO(create_payment_receipt(payment)),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"pliromi-{payment.number}.pdf",
+    )
+
+
+@main.post("/expense-payments/<int:payment_id>/void")
+@login_required
+def expense_payment_void(payment_id):
+    payment = payment_for_admin(payment_id)
+    reason = request.form.get("reason", "").strip()[:200]
+    if payment.voided_at:
+        flash("Η πληρωμή είναι ήδη ακυρωμένη.", "error")
+    elif not reason:
+        flash("Γράψτε τον λόγο ακύρωσης.", "error")
+    else:
+        payment.voided_at = utcnow()
+        payment.void_reason = reason
+        if payment.cash_entry and not payment.cash_entry.voided_at:
+            payment.cash_entry.voided_at, payment.cash_entry.void_reason = payment.voided_at, reason
+            flash(
+                f"Ακυρώθηκε μαζί και η απόδειξη είσπραξης αρ. {payment.cash_entry.number}.",
+                "success",
+            )
+        audit(
+            "expense_payment_voided",
+            current_user.id,
+            payment.building_id,
+            f"{payment.number} · {reason}",
+        )
+        db.session.commit()
+        flash(f"Η πληρωμή αρ. {payment.number} ακυρώθηκε.", "success")
+    return redirect(url_for("main.building_detail", building_id=payment.building_id, tab="cash"))
+
+
+def apartment_from_form(building):
+    """The apartment chosen as "paid by", or None when the fund paid."""
+    value = request.form.get("paid_by", "")
+    if not value:
+        return None
+    apartment = next((item for item in building.apartments if str(item.id) == value), None)
+    if apartment is None:
+        raise ValueError("Μη έγκυρο διαμέρισμα.")
+    return apartment
+
+
+def building_payees(building_id):
+    return db.session.scalars(
+        db.select(Payee).where(Payee.building_id == building_id).order_by(Payee.name)
+    ).all()
+
+
+def payee_from_form(building_id):
+    """The payee by id, or by typed name (an unknown name creates a new payee)."""
+    payee_id = request.form.get("payee_id", 0, type=int)
+    if payee_id:
+        payee = db.session.scalar(
+            db.select(Payee).where(Payee.id == payee_id, Payee.building_id == building_id)
+        )
+        if payee is None:
+            raise ValueError("Επιλέξτε δικαιούχο.")
+        return payee
+    name = " ".join(request.form.get("payee_name", "").split())[:100]
+    if not name:
+        raise ValueError("Επιλέξτε ή γράψτε δικαιούχο.")
+    # casefold in Python: SQLite's lower() ignores Greek
+    for payee in building_payees(building_id):
+        if payee.name.casefold() == name.casefold():
+            return payee
+    payee = Payee(building_id=building_id, name=name)
+    db.session.add(payee)
+    audit("payee_added", current_user.id, building_id, name)
+    return payee
+
+
+PAYEE_EXISTS = "Υπάρχει ήδη δικαιούχος με αυτό το όνομα."
+
+
+@main.post("/buildings/<int:building_id>/payees")
+@login_required
+def payee_add(building_id):
+    building = get_building(building_id, "admin")
+    name = request.form.get("name", "").strip()[:100]
+    try:
+        if not name:
+            raise ValueError("Το όνομα είναι υποχρεωτικό.")
+        db.session.add(Payee(building=building, name=name))
+        audit("payee_added", current_user.id, building.id, name)
+        db.session.commit()
+        flash(f"Προστέθηκε ο δικαιούχος «{name}».", "success")
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        flash(f"Δεν προστέθηκε ο δικαιούχος: {form_error(exc, PAYEE_EXISTS)}", "error")
+    return redirect(url_for("main.building_detail", building_id=building.id, tab="payees"))
+
+
+@main.get("/payees/<int:payee_id>/ledger")
+@login_required
+def payee_ledger_view(payee_id):
+    payee = db.get_or_404(Payee, payee_id)
+    require_role(payee.building_id, "admin")
+    return render_template(
+        "payee_ledger.html",
+        payee=payee,
+        building=payee.building,
+        rows=payee_ledger(payee),
+    )
+
+
+@main.post("/payees/<int:payee_id>/rename")
+@login_required
+def payee_rename(payee_id):
+    payee = db.get_or_404(Payee, payee_id)
+    require_role(payee.building_id, "admin")
+    name = request.form.get("name", "").strip()[:100]
+    try:
+        if not name:
+            raise ValueError("Το όνομα είναι υποχρεωτικό.")
+        audit("payee_renamed", current_user.id, payee.building_id, f"{payee.name} → {name}")
+        payee.name = name
+        db.session.commit()
+        flash("Ο δικαιούχος μετονομάστηκε.", "success")
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        flash(f"Δεν αποθηκεύτηκε: {form_error(exc, PAYEE_EXISTS)}", "error")
+    return redirect(url_for("main.building_detail", building_id=payee.building_id, tab="payees"))
+
+
+@main.post("/periods/<int:period_id>/recurring")
+@login_required
+def expense_add_recurring(period_id):
+    period = db.get_or_404(Period, period_id)
+    require_role(period.building_id, "admin")
+    if period.status != "draft":
+        abort(409)
+    _source, suggestions = recurring_suggestions(period)
+    chosen = set(request.form.getlist("copy"))
+    added = 0
+    try:
+        for item in suggestions:
+            key = str(item.source.id)
+            if key not in chosen:
+                continue
+            label = item.source.description
+            invoice_number = request.form.get(f"number_{key}", "").strip()
+            description = request.form.get(f"description_{key}", "").strip()
+            if not invoice_number or not description:
+                raise ValueError(f"Ο αριθμός και η περιγραφή είναι υποχρεωτικά: {label}.")
+            db.session.add(
+                Expense(
+                    period=period,
+                    category=item.source.category,
+                    payee=item.source.payee,
+                    recurring=True,
+                    invoice_date=parse_date(request.form.get(f"date_{key}"), "ημερομηνία"),
+                    invoice_number=invoice_number,
+                    description=description,
+                    amount=parse_amount(request.form.get(f"amount_{key}", ""), label),
+                )
+            )
+            added += 1
+        db.session.flush()
+        audit("recurring_expenses_added", current_user.id, period.building_id, str(added))
+        db.session.commit()
+        flash(f"Προστέθηκαν {added} επαναλαμβανόμενες δαπάνες.", "success")
+    except (ValueError, InvalidOperation, IntegrityError) as exc:
+        db.session.rollback()
+        flash(f"Δεν προστέθηκαν οι δαπάνες: {form_error(exc, EXPENSE_EXISTS)}", "error")
+    return redirect(url_for("main.period_detail", period_id=period.id))
+
+
 @main.post("/periods/<int:period_id>/expenses")
 @login_required
 def expense_add(period_id):
@@ -611,16 +1164,37 @@ def expense_add(period_id):
     require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
+    payment = None
     try:
         expense = Expense(period=period)
         update_expense_from_form(expense, period)
         db.session.add(expense)
+        if request.form.get("paid_cash"):
+            if not period_in_ledger(period):
+                raise ValueError("Ορίστε πρώτα την έναρξη του ταμείου.")
+            db.session.flush()
+            payment = record_payment(
+                period.building,
+                expense,
+                expense.invoice_date,
+                expense.amount,
+                "Πληρωμή μετρητοίς",
+            )
         db.session.commit()
-        flash("Η δαπάνη προστέθηκε.", "success")
+        if payment:
+            flash(f"Η δαπάνη προστέθηκε και πληρώθηκε (πληρωμή αρ. {payment.number}).", "success")
+        else:
+            flash("Η δαπάνη προστέθηκε.", "success")
     except (ValueError, InvalidOperation, IntegrityError) as exc:
         db.session.rollback()
         flash(f"Δεν προστέθηκε η δαπάνη: {form_error(exc, EXPENSE_EXISTS)}", "error")
-    return redirect(url_for("main.period_detail", period_id=period.id))
+    return redirect(
+        url_for(
+            "main.period_detail",
+            period_id=period.id,
+            new_payment=payment.id if payment else None,
+        )
+    )
 
 
 def update_expense_from_form(expense, period):
@@ -634,6 +1208,8 @@ def update_expense_from_form(expense, period):
     if not category:
         raise ValueError("Μη έγκυρη κατηγορία.")
 
+    expense.payee = payee_from_form(period.building_id)
+    expense.recurring = bool(request.form.get("recurring"))
     invoice_number = request.form.get("invoice_number", "").strip()
     description = request.form.get("description", "").strip()
     if not invoice_number or not description:
@@ -643,7 +1219,12 @@ def update_expense_from_form(expense, period):
     expense.invoice_date = parse_date(request.form.get("invoice_date"))
     expense.invoice_number = invoice_number
     expense.description = description
-    expense.amount = Decimal(request.form.get("amount", ""))
+    amount = Decimal(request.form.get("amount", ""))
+    if amount < expense.paid:
+        raise ValueError(
+            f"Το ποσό δεν μπορεί να είναι μικρότερο από τα πληρωμένα ({expense.paid} €)."
+        )
+    expense.amount = amount
 
 
 @main.route("/expenses/<int:expense_id>/edit", methods=["GET", "POST"])
@@ -664,7 +1245,12 @@ def expense_edit(expense_id):
         except (ValueError, InvalidOperation, IntegrityError) as exc:
             db.session.rollback()
             flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {form_error(exc, EXPENSE_EXISTS)}", "error")
-    return render_template("expense_form.html", expense=expense, period=period)
+    return render_template(
+        "expense_form.html",
+        expense=expense,
+        period=period,
+        payees=building_payees(period.building_id),
+    )
 
 
 @main.post("/expenses/<int:expense_id>/delete")
@@ -675,6 +1261,9 @@ def expense_delete(expense_id):
     require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
+    if expense.payments:
+        flash("Η δαπάνη έχει καταχωρημένες πληρωμές και δεν μπορεί να διαγραφεί.", "error")
+        return redirect(url_for("main.period_detail", period_id=period.id))
     db.session.delete(expense)
     audit("expense_deleted", current_user.id, period.building_id, str(expense.id))
     db.session.commit()

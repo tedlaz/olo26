@@ -7,15 +7,15 @@
   ('apartments', 'Διαμερίσματα', building.apartments|length),
   ('categories', 'Κατηγορίες', building.categories|length),
   ('managers', 'Διαχειριστές', managers|length),
-] %}
-{% set tab = request.args.get('tab') if request.args.get('tab') in ['periods', 'apartments', 'categories', 'managers'] else 'periods' %}
+] + ([('payees', 'Δικαιούχοι', payees|length), ('cash', 'Ταμείο', none)] if role == 'admin' else []) %}
+{% set tab = request.args.get('tab') if request.args.get('tab') in tabs|map('first')|list else 'periods' %}
 <div class="page-head">
   <div><p class="eyebrow">{{ building.address }} · {{ building.postal_code }}</p><h1>{{ building.name }}</h1></div>
   {% if role == 'admin' %}<div class="actions"><button type="button" class="secondary" data-open="dlg-building">Στοιχεία κτιρίου</button><button type="button" class="secondary danger" data-open="dlg-delete">Διαγραφή κτιρίου</button></div>{% endif %}
 </div>
 
 <nav class="tabs" aria-label="Ενότητες κτιρίου">
-  {% for key, label, count in tabs %}<a class="tab{% if key == tab %} active{% endif %}" href="{{ url_for('main.building_detail', building_id=building.id, tab=key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }} <span class="tab-count">{{ count }}</span></a>{% endfor %}
+  {% for key, label, count in tabs %}<a class="tab{% if key == tab %} active{% endif %}" href="{{ url_for('main.building_detail', building_id=building.id, tab=key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }}{% if count is not none %} <span class="tab-count">{{ count }}</span>{% endif %}</a>{% endfor %}
 </nav>
 
 {% if role == 'admin' %}{% call modal('dlg-building', 'Στοιχεία κτιρίου και εμφάνιση') %}<form method="post" action="{{ url_for('main.building_update', building_id=building.id) }}" class="stack"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="span-2">Ονομασία<input name="name" value="{{ building.name }}" required></label><label>ΤΚ<input name="postal_code" value="{{ building.postal_code }}" required></label><label class="span-2">Διεύθυνση<input name="address" value="{{ building.address }}" required></label><label>Εμφάνιση διαμερισμάτων<select name="apartment_display_mode"><option value="occupant" {% if building.apartment_display_mode == 'occupant' %}selected{% endif %}>Αριθμός + ένοικος</option><option value="owner" {% if building.apartment_display_mode == 'owner' %}selected{% endif %}>Αριθμός + ιδιοκτήτης</option><option value="name" {% if building.apartment_display_mode == 'name' %}selected{% endif %}>Αριθμός + ονομασία</option></select></label><button>Αποθήκευση</button></form>{% endcall %}{% endif %}
@@ -58,6 +58,111 @@
 <section class="card"><div class="section-head"><h2>Κατηγορίες</h2>{% if role == 'admin' %}<div class="actions"><a class="button secondary" data-modal href="{{ url_for('main.millesimals', building_id=building.id) }}">Μήτρα χιλιοστών</a><a class="button" data-modal href="{{ url_for('main.category_add', building_id=building.id) }}">Νέα κατηγορία</a></div>{% endif %}</div>
   <ul class="clean-list">{% for item in building.categories %}<li><strong>{{ item.name }}</strong></li>{% else %}<li>Δεν υπάρχουν κατηγορίες.</li>{% endfor %}</ul>
 </section>
+
+{% elif tab == 'cash' %}
+{% if not building.ledger_start_date %}
+<section class="card"><div class="section-head"><h2>Ταμείο</h2><a class="button" data-modal href="{{ url_for('main.cash_setup', building_id=building.id) }}">Έναρξη ταμείου</a></div>
+  <p>Το ταμείο δεν έχει ξεκινήσει. Ορίστε ημερομηνία έναρξης και το υπόλοιπο και το αποθεματικό κάθε διαμερίσματος εκείνη την ημέρα. Από εκεί και πέρα κάθε οριστικοποιημένη περίοδος χρεώνει τα διαμερίσματα και κάθε είσπραξη τα πιστώνει.</p>
+</section>
+{% else %}
+{% set report = cash.report %}
+{% if cash.new_payment %}
+<div class="flash success">Η πληρωμή αρ. {{ cash.new_payment.number }} καταχωρήθηκε. <a class="button" href="{{ url_for('main.expense_payment_receipt_pdf', payment_id=cash.new_payment.id) }}" target="_blank" rel="noopener" data-hx-boost="false">Εκτύπωση απόδειξης πληρωμής</a></div>
+{% endif %}
+<section class="card"><div class="section-head"><h2>Μετρητά στο ταμείο: {{ '%.2f'|format(report.cash) }} € <span class="optional-label">από {{ building.ledger_start_date.strftime('%d/%m/%Y') }}</span></h2><div class="actions"><a class="button secondary" data-modal href="{{ url_for('main.cash_reserves', building_id=building.id) }}">Αποθεματικό</a><a class="button secondary" data-modal href="{{ url_for('main.cash_setup', building_id=building.id) }}">Αρχικά υπόλοιπα</a><a class="button" data-modal href="{{ url_for('main.cash_entry_new', building_id=building.id) }}">Νέα κίνηση</a></div></div>
+  <div class="table-wrap"><table>
+    <tbody>
+      <tr><td>Αποθεματικά διαμερισμάτων</td><td class="numeric">{{ '%.2f'|format(report.reserve) }} €</td></tr>
+      <tr><td>− Οφειλές διαμερισμάτων (πιστώσεις αφαιρούνται)</td><td class="numeric">{{ '%.2f'|format(report.debts) }} €</td></tr>
+      <tr><td>+ Ανεξόφλητες δαπάνες εκδοθέντων κοινοχρήστων</td><td class="numeric">{{ '%.2f'|format(report.unpaid) }} €</td></tr>
+      <tr><td>− Πληρωμές δαπανών πρόχειρων περιόδων</td><td class="numeric">{{ '%.2f'|format(report.prepaid) }} €</td></tr>
+    </tbody>
+    <tfoot>
+      <tr><th>Αναμενόμενα μετρητά</th><th class="numeric">{{ '%.2f'|format(report.expected) }} €</th></tr>
+      <tr><th>Διαφορά{% if report.difference == 0 %} <span class="status finalized">Συμφωνεί</span>{% else %} <span class="status">Δεν συμφωνεί</span>{% endif %}</th><th class="numeric">{{ '%.2f'|format(report.difference) }} €</th></tr>
+    </tfoot>
+  </table></div>
+  <p>Όταν όλα τα διαμερίσματα έχουν πληρώσει και όλες οι δαπάνες έχουν εξοφληθεί, στο ταμείο πρέπει να μένουν ακριβώς τα αποθεματικά. Διαφορά σημαίνει ξεχασμένη κίνηση ή αρχικά υπόλοιπα που δεν ταιριάζουν.</p>
+</section>
+{% if report.payable_expenses %}
+<section class="card"><div class="section-head"><h2>Ανεξόφλητες δαπάνες</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Περίοδος</th><th>Ημ/νία</th><th>Περιγραφή</th><th class="numeric">Ποσό</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
+    <tbody>{% for expense in report.payable_expenses %}<tr><td><a href="{{ url_for('main.period_detail', period_id=expense.period_id) }}">No {{ expense.period.number }}</a>{% if expense.period.status == 'draft' %} <span class="status">Πρόχειρη</span>{% endif %}</td><td>{{ expense.invoice_date.strftime('%d/%m/%Y') }}</td><td>{{ expense.description }}</td><td class="numeric">{{ '%.2f'|format(expense.amount) }} €</td><td class="numeric">{{ '%.2f'|format(expense.amount - expense.paid) }} €</td><td class="numeric"><a class="expense-action-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=expense.id) }}">Πληρωμή</a></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+{% set balances = cash.rows|rejectattr('balance', 'equalto', 0)|list %}
+{% if balances %}
+<section class="card"><div class="section-head"><h2>Υπόλοιπα διαμερισμάτων</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Διαμέρισμα</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
+    <tbody>{% for row in balances %}<tr><td><a href="{{ url_for('main.apartment_ledger_view', apartment_id=row.apartment.id) }}">{{ row.apartment.display_label() }}</a></td><td class="numeric">{{ '%.2f'|format(row.balance) }} €{% if row.balance < 0 %} <span class="optional-label">πίστωση</span>{% endif %}</td><td class="numeric">{% if row.balance > 0 %}<a class="expense-action-badge" data-modal href="{{ url_for('main.cash_entry_new', building_id=building.id, apartment_id=row.apartment.id) }}">Είσπραξη</a>{% endif %}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><th>Σύνολο</th><th class="numeric">{{ '%.2f'|format(balances|sum(attribute='balance')) }} €</th><th></th></tr></tfoot>
+  </table></div>
+  <p>Θετικό υπόλοιπο σημαίνει οφειλή, αρνητικό πίστωση. Διαμερίσματα με μηδενικό υπόλοιπο δεν εμφανίζονται.</p>
+</section>
+{% endif %}
+<section class="card"><div class="section-head"><h2>Βιβλίο ταμείου <span class="optional-label">νεότερες κινήσεις πρώτα</span></h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Ημ/νία</th><th>Παραστατικό</th><th>Αιτιολογία</th><th class="numeric">Είσπραξη</th><th class="numeric">Πληρωμή</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
+    <tbody>
+    {% for row in cash.book %}
+      {% set item = row.entry or row.payment %}
+      <tr>
+        <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
+        <td>{% if row.entry %}Απόδειξη είσπραξης αρ. {{ item.number }}{% else %}Απόδειξη πληρωμής αρ. {{ item.number }}{% endif %}{% if item.voided_at %} <span class="status">Ακυρωμένη: {{ item.void_reason }}</span>{% endif %}</td>
+        <td>{% if row.entry %}{{ item.kind_label }} · <a href="{{ url_for('main.apartment_ledger_view', apartment_id=item.apartment_id) }}">{{ item.apartment.display_label() }}</a>{% else %}{{ item.payee }} · <a href="{{ url_for('main.period_detail', period_id=item.expense.period_id) }}">{{ item.expense.description }}</a>{% endif %}</td>
+        <td class="numeric">{% if row.delta > 0 %}{% if item.voided_at %}<s>{% endif %}{{ '%.2f'|format(row.delta) }} €{% if item.voided_at %}</s>{% endif %}{% endif %}</td>
+        <td class="numeric">{% if row.delta < 0 %}{% if item.voided_at %}<s>{% endif %}{{ '%.2f'|format(-row.delta) }} €{% if item.voided_at %}</s>{% endif %}{% endif %}</td>
+        <td class="numeric">{{ '%.2f'|format(row.balance) }} €</td>
+        <td class="numeric">{% if row.entry %}<a class="expense-action-badge" href="{{ url_for('main.cash_entry_receipt_pdf', entry_id=item.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% else %}<a class="expense-action-badge" href="{{ url_for('main.expense_payment_receipt_pdf', payment_id=item.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% if not item.voided_at %} <button type="button" class="expense-action-badge" data-open="dlg-void-payment-{{ item.id }}">Ακύρωση</button>{% endif %}{% endif %}</td>
+      </tr>
+    {% endfor %}
+      <tr><td>{{ building.ledger_start_date.strftime('%d/%m/%Y') }}</td><td>Αρχικά μετρητά</td><td></td><td></td><td></td><td class="numeric">{{ '%.2f'|format(building.opening_cash) }} €</td><td></td></tr>
+    </tbody>
+  </table></div>
+  <p>Οι εισπράξεις ακυρώνονται από την καρτέλα του διαμερίσματος.</p>
+</section>
+{% for payment in cash.book|map(attribute='payment')|select if not payment.voided_at %}
+{% call modal('dlg-void-payment-%d'|format(payment.id), 'Ακύρωση πληρωμής αρ. %d'|format(payment.number)) %}
+  <form method="post" action="{{ url_for('main.expense_payment_void', payment_id=payment.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="span-2">Η πληρωμή δεν διαγράφεται. Μένει ως ακυρωμένη και η δαπάνη ξαναγίνεται ανεξόφλητη κατά το ποσό της.</p>
+    <label class="span-2">Λόγος ακύρωσης<input name="reason" maxlength="200" required></label>
+    <button class="restore-button">Ακύρωση πληρωμής</button>
+  </form>
+{% endcall %}
+{% endfor %}
+{% endif %}
+
+{% elif tab == 'payees' %}
+<section class="card"><div class="section-head"><h2>Δικαιούχοι</h2><button type="button" data-open="dlg-payee">Νέος δικαιούχος</button></div>
+  <p>Ο δικαιούχος επιλέγεται σε κάθε νέα δαπάνη και τυπώνεται στην απόδειξη πληρωμής.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Δικαιούχος</th><th class="numeric">Υπόλοιπο προς δικαιούχο</th><th></th></tr></thead>
+    <tbody>{% for payee in payees %}<tr><td><a href="{{ url_for('main.payee_ledger_view', payee_id=payee.id) }}">{{ payee.name }}</a></td><td class="numeric">{{ '%.2f'|format(payee_balances[payee.id]) }} €</td><td class="numeric"><button type="button" class="expense-action-badge" data-open="dlg-payee-{{ payee.id }}">Μετονομασία</button></td></tr>
+    {% else %}<tr><td colspan="3">Δεν υπάρχουν δικαιούχοι.</td></tr>{% endfor %}</tbody>
+    {% if payees %}<tfoot><tr><th>Σύνολο</th><th class="numeric">{{ '%.2f'|format(payee_balances.values()|sum) }} €</th><th></th></tr></tfoot>{% endif %}
+  </table></div>
+</section>
+{% call modal('dlg-payee', 'Νέος δικαιούχος') %}
+  <form method="post" action="{{ url_for('main.payee_add', building_id=building.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="span-2">Όνομα<input name="name" maxlength="100" placeholder="π.χ. ΔΕΗ, ΕΥΔΑΠ, Συνεργείο καθαρισμού" required></label>
+    <button>Προσθήκη</button>
+  </form>
+{% endcall %}
+{% for payee in payees %}
+{% call modal('dlg-payee-%d'|format(payee.id), 'Μετονομασία δικαιούχου') %}
+  <form method="post" action="{{ url_for('main.payee_rename', payee_id=payee.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="span-2">Όνομα<input name="name" maxlength="100" value="{{ payee.name }}" required></label>
+    <button>Αποθήκευση</button>
+  </form>
+{% endcall %}
+{% endfor %}
 
 {% else %}
 <section class="card"><div class="section-head"><h2>Διαχειριστές</h2>{% if role == 'admin' and eligible_users %}<button type="button" data-open="dlg-manager">Νέα θητεία</button>{% endif %}</div>

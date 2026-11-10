@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% block title %}Καρτέλα {{ apartment.display_label() }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{{ url_for('main.building_detail', building_id=building.id, tab='cash') }}">{{ building.name }} · Ταμείο</a></p><h1>Καρτέλα {{ apartment.display_label() }}</h1></div>
+  {% if building.ledger_start_date %}<div class="actions"><a class="button" data-modal href="{{ url_for('main.cash_entry_new', building_id=building.id, apartment_id=apartment.id) }}">Νέα κίνηση</a></div>{% endif %}
+</div>
+
+{% if new_entry %}
+<div class="flash success">Η απόδειξη αρ. {{ new_entry.number }} είναι έτοιμη. <a class="button" href="{{ url_for('main.cash_entry_receipt_pdf', entry_id=new_entry.id) }}" target="_blank" rel="noopener" data-hx-boost="false">Εκτύπωση απόδειξης</a></div>
+{% endif %}
+
+<section class="card">
+  {% if not building.ledger_start_date %}
+  <p>Το ταμείο του κτιρίου δεν έχει ξεκινήσει.</p>
+  {% else %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Ημ/νία</th><th>Κίνηση</th><th class="numeric">Χρέωση</th><th class="numeric">Είσπραξη</th><th class="numeric">Υπόλοιπο</th><th class="numeric">Αποθεματικό</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>{{ building.ledger_start_date.strftime('%d/%m/%Y') }}</td><td>Αρχικά υπόλοιπα</td><td></td><td></td><td class="numeric">{{ '%.2f'|format(apartment.opening_balance) }} €</td><td class="numeric">{{ '%.2f'|format(apartment.opening_reserve) }} €</td><td></td></tr>
+      {% for row in rows %}
+      {% if row.period %}
+      <tr><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td><a href="{{ url_for('main.period_detail', period_id=row.period.id) }}">Κοινόχρηστα No {{ row.period.number }}</a></td><td class="numeric">{{ '%.2f'|format(row.charge) }} €</td><td></td><td class="numeric">{{ '%.2f'|format(row.balance) }} €</td><td class="numeric">{{ '%.2f'|format(row.reserve) }} €</td><td></td></tr>
+      {% else %}
+      {% set entry = row.entry %}
+      <tr{% if entry.voided_at %} class="muted"{% endif %}><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td>{% if entry.voided_at %}<s>{% endif %}Αρ. {{ entry.number }} · {{ entry.kind_label }}{% if entry.kind != 'collection' %} {{ '%.2f'|format(entry.amount) }} €{% endif %}{% if entry.notes %} · {{ entry.notes }}{% endif %}{% if entry.voided_at %}</s> <span class="status">Ακυρωμένη: {{ entry.void_reason }}</span>{% endif %}</td><td></td><td class="numeric">{% if entry.kind == 'collection' %}{% if entry.voided_at %}<s>{% endif %}{{ '%.2f'|format(entry.amount) }} €{% if entry.voided_at %}</s>{% endif %}{% endif %}</td><td class="numeric">{{ '%.2f'|format(row.balance) }} €</td><td class="numeric">{{ '%.2f'|format(row.reserve) }} €</td>
+        <td class="numeric"><a class="expense-action-badge" href="{{ url_for('main.cash_entry_receipt_pdf', entry_id=entry.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% if not entry.voided_at %} <button type="button" class="expense-action-badge" data-open="dlg-void-{{ entry.id }}">Ακύρωση</button>{% endif %}</td></tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <p>Θετικό υπόλοιπο σημαίνει οφειλή, αρνητικό πίστωση.</p>
+  {% endif %}
+</section>
+
+{% for row in rows if row.entry and not row.entry.voided_at %}
+{% call modal('dlg-void-%d'|format(row.entry.id), 'Ακύρωση απόδειξης αρ. %d'|format(row.entry.number)) %}
+  <form method="post" action="{{ url_for('main.cash_entry_void', entry_id=row.entry.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="span-2">Η απόδειξη δεν διαγράφεται. Μένει στη λίστα ως ακυρωμένη και δεν μετράει στα υπόλοιπα.</p>
+    <label class="span-2">Λόγος ακύρωσης<input name="reason" maxlength="200" required></label>
+    <button class="restore-button">Ακύρωση απόδειξης</button>
+  </form>
+{% endcall %}
+{% endfor %}
+{% endblock %}

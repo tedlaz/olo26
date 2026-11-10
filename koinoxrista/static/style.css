@@ -769,6 +769,13 @@ input[type="checkbox"] {
   accent-color: var(--teal);
 }
 
+label.checkbox {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
 .actions,
 .inline-form {
   display: flex;
@@ -1036,6 +1043,27 @@ input[type="checkbox"] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.paid-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--success-line);
+  border-radius: 50%;
+  color: var(--success);
+  background: var(--success-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: help;
+}
+
+.expense-payee {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 
 .optional-label {

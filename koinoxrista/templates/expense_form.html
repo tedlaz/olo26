@@ -10,7 +10,9 @@
     <label>Αριθμός παραστατικού<input name="invoice_number" value="{{ expense.invoice_number }}" required></label>
     <label>Κατηγορία<select name="category_id" required>{% for category in period.building.categories %}<option value="{{ category.id }}"{% if category.id == expense.category_id %} selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></label>
     <label class="span-2">Περιγραφή<input name="description" value="{{ expense.description }}" required></label>
+    <label class="span-2">Δικαιούχος <span class="optional-label">Επιλέξτε ή γράψτε νέο</span><input name="payee_name" list="payee-list" maxlength="100" autocomplete="off" value="{{ expense.payee.name if expense.payee else '' }}" required><datalist id="payee-list">{% for payee in payees %}<option value="{{ payee.name }}">{% endfor %}</datalist></label>
     <label>Ποσό (€)<input type="number" step="0.01" name="amount" value="{{ expense.amount }}" required></label>
+    <label class="span-2 checkbox"><input type="checkbox" name="recurring" value="1"{% if expense.recurring %} checked{% endif %}> Επαναλαμβανόμενη (προτείνεται σε κάθε νέα περίοδο)</label>
     <button>Αποθήκευση αλλαγών</button>
   </form>
 </section>

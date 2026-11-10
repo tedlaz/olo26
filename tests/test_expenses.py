@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from koinoxrista.extensions import db
-from koinoxrista.models import Building, Expense, ExpenseCategory, Period, User
+from koinoxrista.models import Building, Expense, ExpenseCategory, Payee, Period, User
 
 
 def create_expense(app, *, period_status="draft"):
@@ -16,6 +16,7 @@ def create_expense(app, *, period_status="draft"):
             created_by_id=admin.id,
         )
         category = ExpenseCategory(building=building, name="Καθαρισμός")
+        payee = Payee(building=building, name="Συνεργείο")
         period = Period(
             building=building,
             issue_date=date(2026, 8, 1),
@@ -29,6 +30,7 @@ def create_expense(app, *, period_status="draft"):
             invoice_number="A-1",
             description="Αρχική περιγραφή",
             amount=Decimal("10.00"),
+            payee=payee,
         )
         db.session.add(building)
         db.session.commit()
@@ -56,7 +58,11 @@ def test_period_expenses_show_distinct_create_panel_and_edit_action(app, client)
 
 def test_expense_can_be_edited(app, client):
     period_id, expense_id, category_id = create_expense(app)
+    with app.app_context():
+        payee_id = db.session.scalar(db.select(Payee.id))
     login(client)
+    form = client.get(f"/expenses/{expense_id}/edit").text
+    assert 'list="payee-list"' in form and 'value="Συνεργείο" required' in form
 
     response = client.post(
         f"/expenses/{expense_id}/edit",
@@ -66,6 +72,7 @@ def test_expense_can_be_edited(app, client):
             "description": "Νέα περιγραφή",
             "category_id": str(category_id),
             "amount": "25.40",
+            "payee_id": str(payee_id),
         },
         follow_redirects=False,
     )
@@ -194,8 +201,35 @@ def test_period_pdfs_open_inline_in_browser(app, client):
         period_id = period.id
     login(client)
 
-    for path, name in (("report.pdf", "koinoxrista"), ("receipts.pdf", "apodeixeis")):
+    for path, name in (
+        ("report.pdf", "koinoxrista"),
+        ("notices.pdf", "eidopoiiseis"),
+        ("receipts.pdf", "apodeixeis"),
+    ):
         response = client.get(f"/periods/{period_id}/{path}")
         assert response.status_code == 200
         assert response.mimetype == "application/pdf"
         assert response.headers["Content-Disposition"] == f"inline; filename={name}-2026-08-01.pdf"
+
+
+def test_new_expense_requires_a_payee_of_the_building(app, client):
+    period_id, _, category_id = create_expense(app)
+    login(client)
+    data = {
+        "invoice_date": "2026-08-05",
+        "invoice_number": "N-1",
+        "description": "Λάμπες",
+        "category_id": str(category_id),
+        "amount": "12",
+    }
+    response = client.post(f"/periods/{period_id}/expenses", data=data, follow_redirects=True)
+    assert "Επιλέξτε ή γράψτε δικαιούχο" in response.text
+    with app.app_context():
+        payee_id = db.session.scalar(db.select(Payee.id))
+    client.post(
+        f"/periods/{period_id}/expenses",
+        data=data | {"payee_id": str(payee_id), "recurring": "1"},
+    )
+    with app.app_context():
+        expense = db.session.scalar(db.select(Expense).where(Expense.invoice_number == "N-1"))
+        assert expense.payee.name == "Συνεργείο" and expense.recurring

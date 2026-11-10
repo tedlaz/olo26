@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Έναρξη ταμείου{% endblock %}
+{% block content %}
+<section class="card" data-modal-content>
+  <p class="eyebrow">{{ building.name }}</p>
+  <h1>Έναρξη ταμείου</h1>
+  <form method="post" action="{{ request.path }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Ημερομηνία έναρξης<input type="date" name="ledger_start_date" value="{{ request.form.get('ledger_start_date') or (building.ledger_start_date.isoformat() if building.ledger_start_date else '') }}" required></label>
+    <label>Μετρητά στο ταμείο εκείνη την ημέρα (€)<input type="number" step="0.01" name="opening_cash" value="{{ request.form.get('opening_cash') or '%.2f'|format(building.opening_cash or 0) }}" required></label>
+    <p>Οι οριστικοποιημένες περίοδοι με ημερομηνία έκδοσης από αυτή την ημέρα και μετά χρεώνουν τα διαμερίσματα και οι δαπάνες τους πληρώνονται από το ταμείο. Το αρχικό αποθεματικό ορίζεται από το κουμπί «Αποθεματικό». Οι περίοδοι που εκδόθηκαν νωρίτερα θεωρούνται τακτοποιημένες: ό,τι χρωστάει ακόμα ένα διαμέρισμα από αυτές μπαίνει στο αρχικό υπόλοιπο, και οι δαπάνες τους θεωρούνται εξοφλημένες. Θετικό υπόλοιπο σημαίνει ότι το διαμέρισμα χρωστάει, αρνητικό ότι έχει πίστωση.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Διαμέρισμα</th><th class="numeric">Αρχικό υπόλοιπο (€)</th></tr></thead>
+      <tbody>{% for apartment in apartments %}<tr><th>{{ apartment.display_label() }}</th><td><input type="number" step="0.01" name="balance_{{ apartment.id }}" value="{{ request.form.get('balance_%d'|format(apartment.id)) or '%.2f'|format(apartment.opening_balance or 0) }}" required></td></tr>{% endfor %}</tbody>
+    </table></div>
+    <div class="form-footer"><p>Οι αλλαγές καταγράφονται στο ιστορικό ενεργειών.</p><button>Αποθήκευση</button></div>
+  </form>
+</section>
+{% endblock %}

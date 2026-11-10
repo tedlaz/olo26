@@ -7,13 +7,19 @@
     <p class="eyebrow"><a href="{{ url_for('main.building_detail', building_id=period.building.id) }}">{{ period.building.name }}</a></p>
     <h1>{{ period.issue_date.strftime('%d/%m/%Y') }} <span class="status {{ period.status }}">{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</span></h1>
     <p class="period-meta">Διαχειριστής <strong>{{ period.manager_name_snapshot or '—' }}</strong> · No <strong>{{ period.number }}</strong>{% if period.comments %} · {{ period.comments }}{% endif %}</p>
+    {% set ledger_start = period.building.ledger_start_date %}
+    {% if role == 'admin' and ledger_start and period.status == 'finalized' and period.issue_date < ledger_start %}<p class="period-meta"><span class="status finalized">Εξοφλημένη</span> Εκδόθηκε πριν την έναρξη του ταμείου ({{ ledger_start.strftime('%d/%m/%Y') }}). Οι δαπάνες της θεωρούνται εξοφλημένες μαζί με τα παλαιά κοινόχρηστα.</p>{% endif %}
   </div>
   <div class="actions">
     {% if period.status == 'draft' and role == 'admin' %}
       <a class="button secondary" data-modal href="{{ url_for('main.period_edit', period_id=period.id) }}">Διόρθωση στοιχείων</a>
     {% endif %}
+    {% if role == 'admin' and period.building.ledger_start_date %}
+      <a class="button secondary" href="{{ url_for('main.building_detail', building_id=period.building_id, tab='cash') }}">Ταμείο</a>
+    {% endif %}
     {% if period.status == 'finalized' %}
       <a class="button secondary" href="{{ url_for('main.period_report_pdf', period_id=period.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF αναφορά</a>
+      <a class="button secondary" href="{{ url_for('main.period_notices_pdf', period_id=period.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF ειδοποιήσεις</a>
       <a class="button secondary" href="{{ url_for('main.period_receipts_pdf', period_id=period.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF αποδείξεις</a>
     {% endif %}
     {% if period.status == 'draft' and role == 'admin' %}
@@ -30,6 +36,29 @@
   </div>
 </div>
 
+{% set recurring_source, recurring_items = recurring %}
+{% if recurring_items %}
+<section class="card"><div class="section-head"><h2>Επαναλαμβανόμενες δαπάνες <span class="optional-label">από την περίοδο No {{ recurring_source.number }}</span></h2></div>
+  <form method="post" action="{{ url_for('main.expense_add_recurring', period_id=period.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>Ημ/νία</th><th>Παρ/κό</th><th>Περιγραφή</th><th>Κατηγορία · Δικαιούχος</th><th class="numeric">Ποσό (€)</th></tr></thead>
+      <tbody>{% for item in recurring_items %}{% set key = item.source.id %}<tr>
+        <td><input type="checkbox" name="copy" value="{{ key }}" checked aria-label="Προσθήκη"></td>
+        <td><input type="date" name="date_{{ key }}" value="{{ item.invoice_date.isoformat() }}" required></td>
+        <td><input name="number_{{ key }}" value="{{ item.invoice_number }}" required></td>
+        <td><input name="description_{{ key }}" value="{{ item.description }}" required></td>
+        <td>{{ item.source.category.name }}{% if item.source.payee %}<small class="expense-payee">{{ item.source.payee.name }}</small>{% endif %}</td>
+        <td><input type="number" step="0.01" name="amount_{{ key }}" value="{{ '%.2f'|format(item.amount) }}" required></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    <div class="form-footer"><p>Ελέγξτε ημερομηνία, παραστατικό και ποσό. Οι επιλεγμένες προστίθενται ως δαπάνες αυτής της περιόδου.</p><button>Προσθήκη επιλεγμένων</button></div>
+  </form>
+</section>
+{% endif %}
+{% if new_payment %}
+<div class="flash success">Η δαπάνη πληρώθηκε μετρητοίς (πληρωμή αρ. {{ new_payment.number }}). <a class="button" href="{{ url_for('main.expense_payment_receipt_pdf', payment_id=new_payment.id) }}" target="_blank" rel="noopener" data-hx-boost="false">Εκτύπωση απόδειξης πληρωμής</a></div>
+{% endif %}
 <section class="card">
   <div class="section-head"><h2>Δαπάνες</h2>{% if period.status == 'draft' and role == 'admin' %}<button type="button" data-open="dlg-expense">Νέα δαπάνη</button>{% endif %}</div>
   <div class="table-wrap">
@@ -47,12 +76,20 @@
               {% if period.status == 'draft' and role == 'admin' %}
                 <span class="expense-row-actions">
                   <a class="expense-action-badge" data-modal href="{{ url_for('main.expense_edit', expense_id=row.expense.id) }}">Διόρθωση</a>
-                  <form class="mini-form" method="post" action="{{ url_for('main.expense_delete', expense_id=row.expense.id) }}" data-confirm="Να διαγραφεί οριστικά αυτή η δαπάνη;">
+                  {% if not row.expense.payments %}<form class="mini-form" method="post" action="{{ url_for('main.expense_delete', expense_id=row.expense.id) }}" data-confirm="Να διαγραφεί οριστικά αυτή η δαπάνη;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="expense-action-badge danger">Διαγραφή</button>
-                  </form>
+                  </form>{% endif %}
                 </span>
               {% endif %}
+              {% if cash_active %}
+                {% set paid = row.expense.paid %}
+                <span class="expense-row-actions">
+                  {% if row.expense.amount > 0 and paid >= row.expense.amount %}{% set paid_hint = 'Πληρωμένη: %.2f € · τελευταία πληρωμή %s'|format(paid, (row.expense.payments|rejectattr('voided_at')|map(attribute='date')|max).strftime('%d/%m/%Y')) %}<span class="paid-icon" role="img" title="{{ paid_hint }}" aria-label="{{ paid_hint }}">✓</span>
+                  {% elif row.expense.amount > 0 %}{% if paid > 0 %}<span class="status">Πληρωμένα {{ '%.2f'|format(paid) }} €</span>{% endif %}<a class="expense-action-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=row.expense.id) }}">Πληρωμή</a>{% endif %}
+                </span>
+              {% endif %}
+              {% if row.expense.payee %}<small class="expense-payee">{{ row.expense.payee.name }}</small>{% endif %}
             </td>
             {% for amount in row['values'] %}<td class="numeric">{% if amount is not none %}{{ '%.2f'|format(amount) }} €{% endif %}</td>{% endfor %}
           </tr>
@@ -79,7 +116,10 @@
     <label>Αριθμός παραστατικού<input name="invoice_number" required></label>
     <label>Κατηγορία<select name="category_id" required>{% for category in period.building.categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}</select></label>
     <label class="span-2">Περιγραφή<input name="description" required></label>
+    <label class="span-2">Δικαιούχος <span class="optional-label">Επιλέξτε ή γράψτε νέο</span><input name="payee_name" list="payee-list" maxlength="100" autocomplete="off" required><datalist id="payee-list">{% for payee in payees %}<option value="{{ payee.name }}">{% endfor %}</datalist></label>
+    {% if cash_active %}<label class="span-2 checkbox"><input type="checkbox" name="paid_cash" value="1"> Πληρώθηκε μετρητοίς από το ταμείο (καταχωρείται και η πληρωμή, με ημερομηνία του παραστατικού)</label>{% endif %}
     <label>Ποσό (€)<input type="number" step="0.01" name="amount" required></label>
+    <label class="span-2 checkbox"><input type="checkbox" name="recurring" value="1"> Επαναλαμβανόμενη (προτείνεται σε κάθε νέα περίοδο)</label>
     <button>Προσθήκη δαπάνης</button>
   </form>
 {% endcall %}

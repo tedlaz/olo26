@@ -8,7 +8,7 @@ from flask_login import current_user
 from sqlalchemy import inspect, text
 
 from .extensions import csrf, db, login_manager
-from .models import Apartment, Building, Expense, Period, User
+from .models import Apartment, Building, Expense, Payee, Period, User
 
 
 def configured_secret_key():
@@ -81,6 +81,7 @@ def initialize_database():
         db.session.commit()
 
     from .data_migrations import (
+        add_cash_ledger_columns,
         add_period_numbers,
         drop_period_legacy_id,
         normalize_legacy_period_ids,
@@ -89,6 +90,7 @@ def initialize_database():
     normalize_legacy_period_ids()
     drop_period_legacy_id()
     add_period_numbers()
+    add_cash_ledger_columns()
 
     admin = db.session.scalar(db.select(User).where(User.email == "admin@admin.app"))
     created_admin = admin is None
@@ -230,6 +232,10 @@ def create_app(test_config=None):
                     }
                 }
             building = period.building if period else None
+        payee_id = view_args.get("payee_id")
+        if payee_id:
+            payee = db.session.get(Payee, payee_id)
+            building = payee.building if payee else None
         apartment_id = view_args.get("apartment_id")
         if apartment_id:
             apartment = db.session.get(Apartment, apartment_id)

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Καρτέλα {{ payee.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow"><a href="{{ url_for('main.building_detail', building_id=building.id, tab='payees') }}">{{ building.name }} · Δικαιούχοι</a></p><h1>Καρτέλα {{ payee.name }}</h1></div>
+</div>
+
+<section class="card">
+  {% if not building.ledger_start_date %}
+  <p>Το ταμείο του κτιρίου δεν έχει ξεκινήσει.</p>
+  {% else %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Ημ/νία</th><th>Κίνηση</th><th class="numeric">Δαπάνη</th><th class="numeric">Πληρωμή</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      {% set expense = row.expense %}
+      {% if not row.payment %}
+      <tr><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td>{{ expense.description }} · παρ/κό {{ expense.invoice_number }} · <a href="{{ url_for('main.period_detail', period_id=expense.period_id) }}">Περίοδος No {{ expense.period.number }}</a></td><td class="numeric">{{ '%.2f'|format(row.charge) }} €</td><td></td><td class="numeric">{{ '%.2f'|format(row.balance) }} €</td>
+        <td class="numeric">{% if expense.amount - expense.paid > 0 %}<a class="expense-action-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=expense.id) }}">Πληρωμή</a>{% endif %}</td></tr>
+      {% else %}
+      {% set payment = row.payment %}
+      <tr><td>{{ row.date.strftime('%d/%m/%Y') }}</td><td>{% if payment.voided_at %}<s>{% endif %}Απόδειξη πληρωμής αρ. {{ payment.number }}{% if payment.notes %} · {{ payment.notes }}{% endif %}{% if payment.voided_at %}</s> <span class="status">Ακυρωμένη: {{ payment.void_reason }}</span>{% endif %}</td><td></td><td class="numeric">{% if payment.voided_at %}<s>{% endif %}{{ '%.2f'|format(payment.amount) }} €{% if payment.voided_at %}</s>{% endif %}</td><td class="numeric">{{ '%.2f'|format(row.balance) }} €</td>
+        <td class="numeric"><a class="expense-action-badge" href="{{ url_for('main.expense_payment_receipt_pdf', payment_id=payment.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a></td></tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="6">Δεν υπάρχουν δαπάνες του δικαιούχου από την έναρξη του ταμείου.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <p>Υπόλοιπο είναι ό,τι οφείλει ακόμα η πολυκατοικία στον δικαιούχο. Δαπάνες περιόδων πριν την έναρξη του ταμείου ({{ building.ledger_start_date.strftime('%d/%m/%Y') }}) θεωρούνται εξοφλημένες και δεν εμφανίζονται.</p>
+  {% endif %}
+</section>
+{% endblock %}

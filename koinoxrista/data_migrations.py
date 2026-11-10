@@ -130,3 +130,40 @@ def add_period_numbers():
     )
     db.session.commit()
     return backup_path
+
+
+def add_cash_ledger_columns():
+    """Add the cash-ledger columns; the new tables themselves come from create_all()."""
+    inspector = inspect(db.engine)
+    building_columns = {column["name"] for column in inspector.get_columns("buildings")}
+    apartment_columns = {column["name"] for column in inspector.get_columns("apartments")}
+    expense_columns = {column["name"] for column in inspector.get_columns("expenses")}
+    payment_columns = {column["name"] for column in inspector.get_columns("expense_payments")}
+    statements = []
+    if "cash_entry_id" not in payment_columns:
+        statements.append(
+            "ALTER TABLE expense_payments ADD COLUMN cash_entry_id INTEGER"
+            " REFERENCES cash_entries(id)"
+        )
+    if "recurring" not in expense_columns:
+        statements.append("ALTER TABLE expenses ADD COLUMN recurring BOOLEAN NOT NULL DEFAULT 0")
+    if "payee_id" not in expense_columns:
+        statements.append("ALTER TABLE expenses ADD COLUMN payee_id INTEGER REFERENCES payees(id)")
+    if "ledger_start_date" not in building_columns:
+        statements.append("ALTER TABLE buildings ADD COLUMN ledger_start_date DATE")
+    if "opening_cash" not in building_columns:
+        statements.append(
+            "ALTER TABLE buildings ADD COLUMN opening_cash NUMERIC(12, 2) NOT NULL DEFAULT 0"
+        )
+    for column in ("opening_balance", "opening_reserve"):
+        if column not in apartment_columns:
+            statements.append(
+                f"ALTER TABLE apartments ADD COLUMN {column} NUMERIC(12, 2) NOT NULL DEFAULT 0"
+            )
+    if not statements:
+        return None
+    backup_path = _backup_sqlite_database("before-cash-ledger")
+    for statement in statements:
+        db.session.execute(text(statement))
+    db.session.commit()
+    return backup_path

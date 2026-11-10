@@ -14,6 +14,7 @@ from koinoxrista.models import (
     User,
 )
 from koinoxrista.pdf_reports import (
+    create_payment_notices,
     create_period_report,
     create_receipts_report,
     period_reference,
@@ -97,7 +98,8 @@ def test_legacy_import_preserves_source_and_imports_all(app):
         assert all(receipt["payable"] != 0 for receipt in receipts)
         assert sum((receipt["payable"] for receipt in receipts), start=0) == first_period.total
         period_pdf = create_period_report(first_period)
-        receipts_pdf = create_receipts_report(first_period)
+        receipts_pdf = create_payment_notices(first_period)
+        assert create_receipts_report(first_period).startswith(b"%PDF")
         assert period_pdf.startswith(b"%PDF")
         assert receipts_pdf.startswith(b"%PDF")
         assert len(period_pdf) > 5_000
