@@ -8,8 +8,6 @@ FROM ${UV_IMAGE} AS uv
 FROM ${PYTHON_IMAGE} AS builder
 COPY --from=uv /uv /usr/local/bin/uv
 
-RUN apk add --no-cache font-dejavu
-
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
@@ -33,14 +31,11 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONHASHSEED=random \
     HOME=/tmp \
-    DATABASE_URL=sqlite:////app/instance/koinoxrista_app.db \
-    PDF_FONT_PATH=/usr/share/fonts/dejavu/DejaVuSans.ttf \
-    PDF_FONT_BOLD_PATH=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
+    DATABASE_URL=sqlite:////app/instance/koinoxrista_app.db
 
 WORKDIR /app
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --from=builder /usr/share/fonts/dejavu/DejaVuSans.ttf /usr/share/fonts/dejavu/DejaVuSans-Bold.ttf /usr/share/fonts/dejavu/
 COPY --chown=app:app run.py ./
 COPY --chown=app:app koinoxrista ./koinoxrista
 COPY --chown=app:app docker-entrypoint.sh ./

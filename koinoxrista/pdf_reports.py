@@ -1,4 +1,3 @@
-import os
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -54,28 +53,8 @@ def report_title(period):
     return f"Κοινόχρηστα {period.number} {GREEK_MONTHS[issue_date.month - 1]} {issue_date.year}"
 
 
-def _font_paths():
-    configured = os.environ.get("PDF_FONT_PATH")
-    configured_bold = os.environ.get("PDF_FONT_BOLD_PATH")
-    candidates = [
-        (
-            Path(configured) if configured else None,
-            Path(configured_bold) if configured_bold else None,
-        ),
-        (Path("C:/Windows/Fonts/arial.ttf"), Path("C:/Windows/Fonts/arialbd.ttf")),
-        (
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        ),
-        (
-            Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf"),
-        ),
-    ]
-    for regular, bold in candidates:
-        if regular and regular.is_file():
-            return regular, bold if bold and bold.is_file() else regular
-    raise RuntimeError("Δεν βρέθηκε Unicode PDF font. Ορίστε PDF_FONT_PATH και PDF_FONT_BOLD_PATH.")
+# Bundled so PDFs render identically on every host (Liberation Sans = Arial metrics, SIL OFL).
+FONT_DIR = Path(__file__).parent / "fonts"
 
 
 class CommonExpensesPDF(FPDF):
@@ -95,12 +74,11 @@ class CommonExpensesPDF(FPDF):
 
 
 def _new_pdf(period):
-    regular, bold = _font_paths()
     pdf = CommonExpensesPDF(orientation="P", format="A4")
     pdf.set_margins(12, 12, 12)
     pdf.set_auto_page_break(auto=True, margin=16)
-    pdf.add_font("App", fname=regular)
-    pdf.add_font("App", style="B", fname=bold)
+    pdf.add_font("App", fname=FONT_DIR / "LiberationSans-Regular.ttf")
+    pdf.add_font("App", style="B", fname=FONT_DIR / "LiberationSans-Bold.ttf")
     pdf.set_font("App", size=10)
     pdf.alias_nb_pages()
     pdf.footer_text = f"{period.building.name} · {report_title(period)}"

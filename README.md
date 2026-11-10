@@ -27,9 +27,8 @@ uv run pytest
 Για production απαιτείται ισχυρό `SECRET_KEY`, HTTPS και απενεργοποίηση του
 Flask debug server.
 
-Τα PDF χρησιμοποιούν Unicode TrueType font. Σε Windows χρησιμοποιείται αυτόματα
-η Arial. Σε άλλο σύστημα, αν δεν υπάρχει DejaVu Sans, ορίστε `PDF_FONT_PATH` και
-`PDF_FONT_BOLD_PATH` με τις διαδρομές των κανονικών και bold `.ttf` αρχείων.
+Τα PDF χρησιμοποιούν πάντα τη Liberation Sans (ίδιες διαστάσεις με την Arial, άδεια SIL OFL)
+από τον φάκελο `koinoxrista/fonts/`, ώστε να βγαίνουν ίδια σε κάθε σύστημα.
 
 ## Production με Docker Compose
 
