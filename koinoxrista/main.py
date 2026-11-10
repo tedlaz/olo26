@@ -587,7 +587,7 @@ def period_report_pdf(period_id):
     return send_file(
         BytesIO(create_period_report(period)),
         mimetype="application/pdf",
-        as_attachment=True,
+        as_attachment=False,
         download_name=f"koinoxrista-{period.issue_date.isoformat()}.pdf",
     )
 
@@ -599,7 +599,7 @@ def period_receipts_pdf(period_id):
     return send_file(
         BytesIO(create_receipts_report(period)),
         mimetype="application/pdf",
-        as_attachment=True,
+        as_attachment=False,
         download_name=f"apodeixeis-{period.issue_date.isoformat()}.pdf",
     )
 

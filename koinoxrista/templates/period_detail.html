@@ -13,8 +13,8 @@
       <a class="button secondary" data-modal href="{{ url_for('main.period_edit', period_id=period.id) }}">Διόρθωση στοιχείων</a>
     {% endif %}
     {% if period.status == 'finalized' %}
-      <a class="button secondary" href="{{ url_for('main.period_report_pdf', period_id=period.id) }}" data-hx-boost="false">PDF αναφορά</a>
-      <a class="button secondary" href="{{ url_for('main.period_receipts_pdf', period_id=period.id) }}" data-hx-boost="false">PDF αποδείξεις</a>
+      <a class="button secondary" href="{{ url_for('main.period_report_pdf', period_id=period.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF αναφορά</a>
+      <a class="button secondary" href="{{ url_for('main.period_receipts_pdf', period_id=period.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF αποδείξεις</a>
     {% endif %}
     {% if period.status == 'draft' and role == 'admin' %}
       <form method="post" action="{{ url_for('main.period_finalize', period_id=period.id) }}">

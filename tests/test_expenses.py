@@ -181,3 +181,21 @@ def test_dashboard_card_shows_latest_finalized_and_drafts(app, client):
     page = client.get("/").text
     assert "Τελευταία οριστική" in page and "01/07/2026" in page
     assert "Πρόχειρες" in page and "01/08/2026 · 10.00 €" in page
+
+
+def test_period_pdfs_open_inline_in_browser(app, client):
+    with app.app_context():
+        admin = db.session.scalar(db.select(User).where(User.email == "admin@admin.app"))
+        admin.must_change_password = False
+        building = Building(name="Κ", address="Ο 1", postal_code="1", created_by_id=admin.id)
+        period = Period(building=building, issue_date=date(2026, 8, 1), status="finalized")
+        db.session.add(period)
+        db.session.commit()
+        period_id = period.id
+    login(client)
+
+    for path, name in (("report.pdf", "koinoxrista"), ("receipts.pdf", "apodeixeis")):
+        response = client.get(f"/periods/{period_id}/{path}")
+        assert response.status_code == 200
+        assert response.mimetype == "application/pdf"
+        assert response.headers["Content-Disposition"] == f"inline; filename={name}-2026-08-01.pdf"
