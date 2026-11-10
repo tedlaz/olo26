@@ -569,7 +569,7 @@ def create_cash_receipt(entry):
                 ("Ένοικος", apartment.occupant or "-"),
                 ("Όροφος", str(apartment.floor)),
                 ("Προς" if entry.kind in CashEntry.OUTFLOWS else "Από", entry.party_name or "-"),
-                ("Αιτιολογία", entry.notes or "-"),
+                ("Αιτιολογία", entry.reason),
             ],
         )
         _amount_block(pdf, entry.amount, *side, entry.void_reason if entry.voided_at else None)
@@ -616,7 +616,7 @@ def create_payment_receipt(payment):
                 ("Ποσό δαπάνης", f"{money(expense.amount)} €"),
                 ("Κατηγορία", expense.category.name),
                 ("Περίοδος", f"No {period.number} · {period.issue_date:%d/%m/%Y}"),
-                ("Αιτιολογία", payment.notes or "-"),
+                ("Αιτιολογία", payment.reason),
             ],
         )
         _amount_block(

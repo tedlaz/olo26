@@ -307,6 +307,13 @@ class CashEntry(db.Model):
         "refund": "Επιστροφή πίστωσης",
     }
     OUTFLOWS = ("reserve_out", "refund")
+    # αιτιολογία όταν ο χρήστης αφήνει το πεδίο κενό
+    DEFAULT_NOTES = {
+        "collection": "Εξόφληση κοινοχρήστων",
+        "reserve_in": "Κατάθεση στο αποθεματικό",
+        "reserve_out": "Επιστροφή από το αποθεματικό",
+        "refund": "Επιστροφή πιστωτικού υπολοίπου",
+    }
 
     id = db.Column(db.Integer, primary_key=True)
     building_id = db.Column(db.ForeignKey("buildings.id"), nullable=False, index=True)
@@ -328,6 +335,10 @@ class CashEntry(db.Model):
     @property
     def kind_label(self):
         return self.KINDS[self.kind]
+
+    @property
+    def reason(self):
+        return self.notes or self.DEFAULT_NOTES[self.kind]
 
 
 class ExpensePayment(db.Model):
@@ -357,6 +368,15 @@ class ExpensePayment(db.Model):
     building = db.relationship("Building")
     expense = db.relationship("Expense", back_populates="payments")
     cash_entry = db.relationship("CashEntry", backref=db.backref("covered_payment", uselist=False))
+
+    @staticmethod
+    def default_notes(expense):
+        """Αιτιολογία όταν ο χρήστης αφήνει το πεδίο κενό."""
+        return f"Εξόφληση «{expense.description}» · παρ/κό {expense.invoice_number}"[:200]
+
+    @property
+    def reason(self):
+        return self.notes or self.default_notes(self.expense)
 
 
 class AuditLog(db.Model):

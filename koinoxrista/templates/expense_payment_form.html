@@ -16,7 +16,7 @@
       <option value="">Το ταμείο (μετρητά)</option>
       {% for apartment in apartments %}<option value="{{ apartment.id }}" {% if request.form.get('paid_by') == apartment.id|string %}selected{% endif %}>{{ apartment.display_label() }} (πιστώνεται στην καρτέλα του)</option>{% endfor %}
     </select></label>
-    <label class="span-2">Αιτιολογία <span class="optional-label">Προαιρετικό</span><input name="notes" maxlength="200" value="{{ request.form.get('notes', '') }}" placeholder="π.χ. 1η δόση"></label>
+    <label class="span-2">Αιτιολογία <span class="optional-label">Κενό = η προεπιλογή που φαίνεται</span><input name="notes" maxlength="200" value="{{ request.form.get('notes', '') }}" placeholder="{{ default_notes }}"></label>
     <button>Καταχώρηση και απόδειξη</button>
   </form>
 </section>

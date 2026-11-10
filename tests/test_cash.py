@@ -179,6 +179,7 @@ def test_cash_routes_record_print_and_void(app, client):
     with app.app_context():
         entry = db.session.scalar(db.select(CashEntry))
         assert (entry.number, entry.amount) == (1, D("4.00"))
+        assert entry.notes == CashEntry.DEFAULT_NOTES["collection"]  # left blank
         assert apartment_position(entry.apartment)[0] == D("6.00")
         entry_id = entry.id
 
@@ -283,3 +284,28 @@ def test_ledger_cards_list_newest_first(app, client):
     card = client.get(f"/apartments/{first_id}/ledger").text
     newer, older, opening = (card.index(x) for x in ("Αρ. 2 ·", "Αρ. 1 ·", "Αρχικά υπόλοιπα"))
     assert newer < older < opening
+
+
+def test_cash_book_is_paginated(app, client):
+    building_id = make_building(app)
+    with app.app_context():
+        first = apartments(building_id)[0]
+        for number in range(1, 31):
+            add_entry(building_id, first, "collection", date(2026, 1, number), "1.10", number)
+        voided = db.session.scalar(db.select(CashEntry).where(CashEntry.number == 1))
+        voided.voided_at = date(2026, 2, 1)
+        db.session.commit()
+    login(client)
+    first_page = client.get(f"/buildings/{building_id}?tab=cash").text
+    last_page = client.get(f"/buildings/{building_id}?tab=cash&cash_page=2").text
+
+    assert first_page.count("Απόδειξη είσπραξης αρ.") == 25
+    assert "Απόδειξη είσπραξης αρ. 30" in first_page
+    assert "Αρχικά μετρητά" not in first_page
+    assert "cash_page=2" in first_page and "tab=cash" in first_page
+    assert last_page.count("Απόδειξη είσπραξης αρ.") == 5
+    assert "Αρχικά μετρητά" in last_page
+    assert "31.90 €" in first_page  # 29 valid × 1.10: running balance in cents, voided not counted
+    assert "2.20 €" in last_page  # receipt 3: voided receipt 1 skipped
+    assert 'id="cash_page-next"' in first_page and 'hx-select="#cash-book"' in first_page
+    assert 'id="cash-book"' in last_page

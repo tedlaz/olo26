@@ -170,6 +170,11 @@ def test_payment_routes_guard_cash_and_print(app, client):
     # Cash is now 60 - 50 + 30 - 20 = 20: voiding the 30 receipt would make it negative.
     with app.app_context():
         receipt_id = db.session.scalar(db.select(CashEntry.id))
+        notes = db.session.scalars(
+            db.select(ExpensePayment.notes).order_by(ExpensePayment.id)
+        ).all()
+        expense = db.session.get(Expense, expense_id)
+        assert notes == ["1η δόση", ExpensePayment.default_notes(expense)]  # blank → default
     client.post(f"/cash-entries/{receipt_id}/void", data={"reason": "Λάθος"})
     with app.app_context():
         assert db.session.get(CashEntry, receipt_id).voided_at is None

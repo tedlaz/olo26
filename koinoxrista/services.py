@@ -4,7 +4,8 @@ from collections import defaultdict
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
 from types import SimpleNamespace
 
-from sqlalchemy import or_
+from flask_sqlalchemy.pagination import Pagination
+from sqlalchemy import Integer, case, cast, func, literal, or_, union_all
 
 from .extensions import db
 from .models import (
@@ -676,8 +677,8 @@ def manager_on(building_id, day):
     )
 
 
-def _cash_movements(building, include_voided=False):
-    """Every cash movement of the building, in book order: by date, inflows before outflows."""
+def _cash_movements(building):
+    """Every valid cash movement of the building, in book order (date, inflows first)."""
     rows = []
     entries = db.session.scalars(db.select(CashEntry).where(CashEntry.building_id == building.id))
     for entry in entries:
@@ -692,8 +693,7 @@ def _cash_movements(building, include_voided=False):
         rows.append(
             SimpleNamespace(date=payment.date, delta=-payment.amount, entry=None, payment=payment)
         )
-    if not include_voided:
-        rows = [row for row in rows if not (row.entry or row.payment).voided_at]
+    rows = [row for row in rows if not (row.entry or row.payment).voided_at]
     rows.sort(
         key=lambda row: (
             row.date,
@@ -704,15 +704,101 @@ def _cash_movements(building, include_voided=False):
     return rows
 
 
-def cash_book(building):
-    """Receipts and payments in one book with running balance; voided rows shown, not counted."""
-    balance = Decimal(building.opening_cash)
-    rows = _cash_movements(building, include_voided=True)
+def _cents(column):
+    # integer cents: SQLite keeps Numeric as REAL, so SUM() over raw amounts would drift
+    return cast(func.round(column * 100), Integer)
+
+
+def _cash_book_query(building, newest_first=False):
+    """The cash book in SQL: one row per receipt/payment with its running balance in cents
+    (window SUM in book order: by date, inflows before outflows). Voided rows shown, not counted."""
+    entry_cents = _cents(CashEntry.amount)
+    movements = union_all(
+        db.select(
+            literal("e").label("src"),
+            CashEntry.id,
+            CashEntry.date,
+            CashEntry.number,
+            case((CashEntry.kind.in_(CashEntry.OUTFLOWS), -entry_cents), else_=entry_cents).label(
+                "cents"
+            ),
+            CashEntry.voided_at.is_not(None).label("voided"),
+        ).where(CashEntry.building_id == building.id),
+        db.select(
+            literal("p").label("src"),
+            ExpensePayment.id,
+            ExpensePayment.date,
+            ExpensePayment.number,
+            (-_cents(ExpensePayment.amount)).label("cents"),
+            ExpensePayment.voided_at.is_not(None).label("voided"),
+        ).where(ExpensePayment.building_id == building.id),
+    ).subquery()
+    m = movements.c
+    order = (m.date, m.cents < 0, m.number, m.src, m.id)
+    book = db.select(
+        m.src,
+        m.id,
+        m.date,
+        m.number,
+        m.cents,
+        func.sum(case((m.voided, 0), else_=m.cents))
+        .over(order_by=order, rows=(None, 0))
+        .label("balance"),
+    ).subquery()
+    b = book.c
+    order = (b.date, b.cents < 0, b.number, b.src, b.id)
+    return db.select(book).order_by(
+        *(column.desc() for column in order) if newest_first else order
+    ), movements
+
+
+def _cash_book_rows(building, rows):
+    """SQL book rows → the row objects the templates use (entry/payment loaded per page)."""
+    ids = {"e": [], "p": []}
     for row in rows:
-        if not (row.entry or row.payment).voided_at:
-            balance += row.delta
-        row.balance = balance
-    return rows
+        ids[row.src].append(row.id)
+    entries = {
+        item.id: item
+        for item in db.session.scalars(db.select(CashEntry).where(CashEntry.id.in_(ids["e"])))
+    }
+    payments = {
+        item.id: item
+        for item in db.session.scalars(
+            db.select(ExpensePayment).where(ExpensePayment.id.in_(ids["p"]))
+        )
+    }
+    opening = Decimal(building.opening_cash)
+    return [
+        SimpleNamespace(
+            date=row.date,
+            delta=Decimal(row.cents).scaleb(-2),
+            balance=opening + Decimal(row.balance).scaleb(-2),
+            entry=entries.get(row.id) if row.src == "e" else None,
+            payment=payments.get(row.id) if row.src == "p" else None,
+        )
+        for row in rows
+    ]
+
+
+def cash_book(building):
+    """Receipts and payments in one book with running balance, oldest first."""
+    query, _ = _cash_book_query(building)
+    return _cash_book_rows(building, db.session.execute(query).all())
+
+
+class CashBookPage(Pagination):
+    """One page of the cash book, newest first, paged in the database:
+    CashBookPage(building=..., page=..., per_page=..., error_out=False)."""
+
+    def _query_items(self):
+        building = self._query_args["building"]
+        query, _ = _cash_book_query(building, newest_first=True)
+        query = query.limit(self.per_page).offset((self.page - 1) * self.per_page)
+        return _cash_book_rows(building, db.session.execute(query).all())
+
+    def _query_count(self):
+        _, movements = _cash_book_query(self._query_args["building"])
+        return db.session.scalar(db.select(func.count()).select_from(movements))
 
 
 def lowest_cash(building, add=None, skip=None):

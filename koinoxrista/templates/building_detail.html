@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% from "_modal.html" import modal %}
+{# Σελίδες για db.paginate / ListPagination· τα extra kwargs (π.χ. tab='cash') μένουν στα links. #}
+{# target: id του κομματιού που αλλάζει μόνο αυτό (χωρίς scroll στην κορυφή)· τα ids των links κρατούν το focus. #}
+{% macro pager(p, label, param='page', target=None) %}{% if p.pages > 1 %}
+  {% set hx %}{% if target %} hx-target="#{{ target }}" hx-select="#{{ target }}" hx-swap="outerHTML show:none"{% endif %}{% endset %}
+  <nav class="pagination" aria-label="{{ label }}">
+    <a id="{{ param }}-prev" class="page-link{% if not p.has_prev %} disabled{% endif %}"{{ hx }} {% if p.has_prev %}href="{{ url_for('main.building_detail', building_id=building.id, **dict(kwargs, **{param: p.prev_num})) }}"{% endif %}>Προηγούμενη</a>
+    <div class="page-numbers">
+      {% for n in p.iter_pages(left_edge=1, left_current=2, right_current=3, right_edge=1) %}
+        {% if n %}<a id="{{ param }}-{{ n }}" class="page-link{% if n == p.page %} current{% endif %}"{{ hx }} href="{{ url_for('main.building_detail', building_id=building.id, **dict(kwargs, **{param: n})) }}" {% if n == p.page %}aria-current="page"{% endif %}>{{ n }}</a>{% else %}<span class="page-gap">…</span>{% endif %}
+      {% endfor %}
+    </div>
+    <a id="{{ param }}-next" class="page-link{% if not p.has_next %} disabled{% endif %}"{{ hx }} {% if p.has_next %}href="{{ url_for('main.building_detail', building_id=building.id, **dict(kwargs, **{param: p.next_num})) }}"{% endif %}>Επόμενη</a>
+  </nav>
+{% endif %}{% endmacro %}
 {% block title %}{{ building.name }}{% endblock %}
 {% block content %}
 {% set tabs = [
@@ -27,17 +41,7 @@
     {% for period in periods %}<tr><td><a href="{{ url_for('main.period_detail', period_id=period.id) }}">{{ period.issue_date.strftime('%d/%m/%Y') }}</a></td><td>{{ period.number }}</td><td>{{ period.comments }}</td><td><span class="status {{ period.status }}">{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</span></td><td class="numeric">{{ '%.2f'|format(period.total) }} €</td></tr>
     {% else %}<tr><td colspan="5">Δεν υπάρχουν περίοδοι.</td></tr>{% endfor %}
   </tbody></table></div>
-  {% if periods_pagination.pages > 1 %}
-  <nav class="pagination" aria-label="Σελίδες περιόδων">
-    <a class="page-link{% if not periods_pagination.has_prev %} disabled{% endif %}" {% if periods_pagination.has_prev %}href="{{ url_for('main.building_detail', building_id=building.id, page=periods_pagination.prev_num) }}"{% endif %}>Προηγούμενη</a>
-    <div class="page-numbers">
-      {% for page_number in periods_pagination.iter_pages(left_edge=1, left_current=2, right_current=3, right_edge=1) %}
-        {% if page_number %}<a class="page-link{% if page_number == periods_pagination.page %} current{% endif %}" href="{{ url_for('main.building_detail', building_id=building.id, page=page_number) }}" {% if page_number == periods_pagination.page %}aria-current="page"{% endif %}>{{ page_number }}</a>{% else %}<span class="page-gap">…</span>{% endif %}
-      {% endfor %}
-    </div>
-    <a class="page-link{% if not periods_pagination.has_next %} disabled{% endif %}" {% if periods_pagination.has_next %}href="{{ url_for('main.building_detail', building_id=building.id, page=periods_pagination.next_num) }}"{% endif %}>Επόμενη</a>
-  </nav>
-  {% endif %}
+  {{ pager(periods_pagination, 'Σελίδες περιόδων') }}
 </section>
 
 {% elif tab == 'apartments' %}
@@ -111,11 +115,12 @@
   <p>Χρεωστικό: όσα οφείλει το διαμέρισμα. Πιστωτικό: όσα έχει πληρώσει παραπάνω· συμψηφίζεται αυτόματα με τα επόμενα κοινόχρηστα ή επιστρέφεται με «Επιστροφή». Διαμερίσματα με μηδενικό υπόλοιπο δεν εμφανίζονται.</p>
 </section>
 {% endif %}
+<div id="cash-book">
 <section class="card"><div class="section-head"><h2>Βιβλίο ταμείου <span class="optional-label">νεότερες κινήσεις πρώτα</span></h2></div>
   <div class="table-wrap"><table>
     <thead><tr><th>Ημ/νία</th><th>Παραστατικό</th><th>Αιτιολογία</th><th class="numeric">Είσπραξη</th><th class="numeric">Πληρωμή</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
     <tbody>
-    {% for row in cash.book %}
+    {% for row in cash.book.items %}
       {% set item = row.entry or row.payment %}
       <tr>
         <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
@@ -127,12 +132,13 @@
         <td class="numeric">{% if row.entry %}<a class="expense-action-badge" href="{{ url_for('main.cash_entry_receipt_pdf', entry_id=item.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% else %}<a class="expense-action-badge" href="{{ url_for('main.expense_payment_receipt_pdf', payment_id=item.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% if not item.voided_at %} <button type="button" class="expense-action-badge" data-open="dlg-void-payment-{{ item.id }}">Ακύρωση</button>{% endif %}{% endif %}</td>
       </tr>
     {% endfor %}
-      <tr><td>{{ building.ledger_start_date.strftime('%d/%m/%Y') }}</td><td>Αρχικά μετρητά</td><td></td><td></td><td></td><td class="numeric">{{ '%.2f'|format(building.opening_cash) }} €</td><td></td></tr>
+      {% if not cash.book.has_next %}<tr><td>{{ building.ledger_start_date.strftime('%d/%m/%Y') }}</td><td>Αρχικά μετρητά</td><td></td><td></td><td></td><td class="numeric">{{ '%.2f'|format(building.opening_cash) }} €</td><td></td></tr>{% endif %}
     </tbody>
   </table></div>
+  {{ pager(cash.book, 'Σελίδες βιβλίου ταμείου', 'cash_page', 'cash-book', tab='cash') }}
   <p>Οι εισπράξεις ακυρώνονται από την καρτέλα του διαμερίσματος.</p>
 </section>
-{% for payment in cash.book|map(attribute='payment')|select if not payment.voided_at %}
+{% for payment in cash.book.items|map(attribute='payment')|select if not payment.voided_at %}
 {% call modal('dlg-void-payment-%d'|format(payment.id), 'Ακύρωση πληρωμής αρ. %d'|format(payment.number)) %}
   <form method="post" action="{{ url_for('main.expense_payment_void', payment_id=payment.id) }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -142,6 +148,7 @@
   </form>
 {% endcall %}
 {% endfor %}
+</div>
 {% endif %}
 
 {% elif tab == 'payees' %}

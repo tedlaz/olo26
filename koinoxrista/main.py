@@ -62,12 +62,12 @@ from .permissions import membership_for, require_role, system_admin_required
 from .security import issue_token, normalize_email
 from .services import (
     BuildingWizardError,
+    CashBookPage,
     allocation_report,
     apartment_ledger,
     apartment_position,
     audit,
     build_allocations,
-    cash_book,
     cash_report,
     compute_allocations,
     create_building_graph,
@@ -256,8 +256,12 @@ def building_detail(building_id):
     if role == "admin" and request.args.get("tab") == "cash":
         cash = ledger_summary(building)
         cash["report"] = cash_report(building)
-        # ponytail: whole book in memory, newest 50 shown; paginate if a building outgrows it
-        cash["book"] = list(reversed(cash_book(building)))[:50]
+        cash["book"] = CashBookPage(
+            building=building,
+            page=request.args.get("cash_page", 1, type=int),
+            per_page=25,
+            error_out=False,
+        )
         cash["new_payment"] = db.session.scalar(
             db.select(ExpensePayment).where(
                 ExpensePayment.id == request.args.get("new_payment", 0, type=int),
@@ -776,7 +780,7 @@ def cash_entry_new(building_id):
                 date=entry_date,
                 amount=amount,
                 party_name=request.form.get("party_name", "").strip()[:100],
-                notes=request.form.get("notes", "").strip()[:200],
+                notes=request.form.get("notes", "").strip()[:200] or CashEntry.DEFAULT_NOTES[kind],
                 created_by_id=current_user.id,
             )
             db.session.add(entry)
@@ -809,6 +813,7 @@ def cash_entry_new(building_id):
         credits=credits,
         selected_kind=request.form.get("kind") or request.args.get("kind", "collection"),
         kinds=CashEntry.KINDS,
+        default_notes=CashEntry.DEFAULT_NOTES,
         today=date.today(),
     )
 
@@ -921,7 +926,7 @@ def record_payment(building, expense, payment_date, amount, notes, paid_by=None)
         date=payment_date,
         amount=amount,
         payee=expense.payee.name,
-        notes=notes,
+        notes=notes or ExpensePayment.default_notes(expense),
         created_by_id=current_user.id,
     )
     db.session.add(payment)
@@ -976,6 +981,7 @@ def expense_pay(expense_id):
         payees=building_payees(building.id),
         building=building,
         outstanding=outstanding,
+        default_notes=ExpensePayment.default_notes(expense),
         today=date.today(),
     )
 

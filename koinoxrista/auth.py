@@ -16,6 +16,8 @@ THEMES = {
     "dark": "Σκοτεινό",
     "midnight": "Μεσάνυχτα",
     "forest": "Δάσος",
+    "hn": "HackerNoon",
+    "hnd": "HackerNoon σκοτεινό",
 }
 
 
