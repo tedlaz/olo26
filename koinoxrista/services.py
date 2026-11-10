@@ -553,6 +553,8 @@ def apartment_ledger(apartment):
         if entry and not entry.voided_at:
             if entry.kind == "collection":
                 row.collected = entry.amount
+            elif entry.kind == "refund":
+                row.collected = -entry.amount
             else:
                 row.reserve_change = entry.amount if entry.kind == "reserve_in" else -entry.amount
         balance += row.charge - row.collected
@@ -679,7 +681,7 @@ def _cash_movements(building, include_voided=False):
     rows = []
     entries = db.session.scalars(db.select(CashEntry).where(CashEntry.building_id == building.id))
     for entry in entries:
-        sign = -1 if entry.kind == "reserve_out" else 1
+        sign = -1 if entry.kind in CashEntry.OUTFLOWS else 1
         rows.append(
             SimpleNamespace(date=entry.date, delta=sign * entry.amount, entry=entry, payment=None)
         )

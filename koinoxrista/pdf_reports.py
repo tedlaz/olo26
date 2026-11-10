@@ -6,6 +6,7 @@ from fpdf import FPDF
 from fpdf.enums import CellBordersLayout
 from fpdf.fonts import FontFace
 
+from .models import CashEntry
 from .services import (
     GREEK_MONTHS,
     allocation_report,
@@ -488,6 +489,7 @@ RECEIPT_TITLES = {
     "collection": "Απόδειξη είσπραξης κοινοχρήστων",
     "reserve_in": "Απόδειξη είσπραξης αποθεματικού",
     "reserve_out": "Απόδειξη επιστροφής αποθεματικού",
+    "refund": "Απόδειξη επιστροφής πίστωσης",
 }
 
 
@@ -545,6 +547,8 @@ def create_cash_receipt(entry):
     date_text = entry.date.strftime("%d/%m/%Y")
     if entry.kind == "collection":
         side = ("Υπόλοιπο οφειλής μετά την είσπραξη", after.balance)
+    elif entry.kind == "refund":
+        side = ("Υπόλοιπο διαμερίσματος μετά την επιστροφή", after.balance)
     else:
         side = ("Αποθεματικό διαμερίσματος μετά την κίνηση", after.reserve)
 
@@ -564,12 +568,12 @@ def create_cash_receipt(entry):
                 ("Ημερομηνία", date_text),
                 ("Ένοικος", apartment.occupant or "-"),
                 ("Όροφος", str(apartment.floor)),
-                ("Προς" if entry.kind == "reserve_out" else "Από", entry.party_name or "-"),
+                ("Προς" if entry.kind in CashEntry.OUTFLOWS else "Από", entry.party_name or "-"),
                 ("Αιτιολογία", entry.notes or "-"),
             ],
         )
         _amount_block(pdf, entry.amount, *side, entry.void_reason if entry.voided_at else None)
-        if entry.kind == "reserve_out":
+        if entry.kind in CashEntry.OUTFLOWS:
             _signature(pdf, entry.party_name, "Υπογραφή παραλήπτη")
         else:
             _signature(pdf, manager_name)

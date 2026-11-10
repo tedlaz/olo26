@@ -83,6 +83,7 @@ def initialize_database():
     from .data_migrations import (
         add_cash_ledger_columns,
         add_period_numbers,
+        allow_credit_refunds,
         drop_period_legacy_id,
         normalize_legacy_period_ids,
     )
@@ -91,6 +92,7 @@ def initialize_database():
     drop_period_legacy_id()
     add_period_numbers()
     add_cash_ledger_columns()
+    allow_credit_refunds()
 
     admin = db.session.scalar(db.select(User).where(User.email == "admin@admin.app"))
     created_admin = admin is None

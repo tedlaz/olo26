@@ -52,7 +52,7 @@ def test_period_expenses_show_distinct_create_panel_and_edit_action(app, client)
     assert "Ημερομηνία παραστατικού" in response.text
     assert f"/expenses/{expense_id}/edit" in response.text
     assert "Διόρθωση" in response.text
-    assert 'class="expense-action-badge danger"' in response.text
+    assert 'class="expense-action-badge icon-badge danger" title="Διαγραφή"' in response.text
     assert 'data-confirm="Να διαγραφεί οριστικά αυτή η δαπάνη;"' in response.text
 
 

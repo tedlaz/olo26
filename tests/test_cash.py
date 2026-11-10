@@ -232,7 +232,14 @@ def test_cash_tab_order_and_only_nonzero_balances(app, client):
     book_at = page.index("<h2>Βιβλίο ταμείου")
     assert cash_at < balances_at < book_at
     balances = page[balances_at:book_at]
-    assert "1. Α1" in balances and "3. Α3" in balances and "πίστωση" in balances
+    assert "1. Α1" in balances and "3. Α3" in balances
+    assert "<th>Χρεωστικό</th>" not in balances  # headers are numeric columns
+    assert '<th class="numeric">Χρεωστικό</th><th class="numeric">Πιστωτικό</th>' in balances
+    # Α1 owes 10, Α3 has 5 credit (shown positive, in its own column); net 5 debit
+    assert (
+        '<th>Σύνολο</th><th class="numeric">10.00 €</th><th class="numeric">5.00 €</th>' in balances
+    )
+    assert '<th>Υπόλοιπο</th><th class="numeric">5.00 €</th><th class="numeric"></th>' in balances
     assert "2. Α2" not in balances  # zero balance
     assert f"/buildings/{building_id}/cash/reserves" in page
 

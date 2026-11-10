@@ -10,9 +10,9 @@
       <option value="">Επιλέξτε…</option>
       {% for apartment in apartments %}<option value="{{ apartment.id }}" {% if selected == apartment.id|string %}selected{% endif %}>{{ apartment.display_label() }} · οφειλή {{ suggested[apartment.id|string] }} €</option>{% endfor %}
     </select></label>
-    <label>Είδος<select name="kind" required>{% for key, label in kinds.items() %}<option value="{{ key }}" {% if request.form.get('kind') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Είδος<select name="kind" required>{% for key, label in kinds.items() %}<option value="{{ key }}" {% if selected_kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
     <label>Ημερομηνία<input type="date" name="date" value="{{ request.form.get('date') or today.isoformat() }}" required></label>
-    <label>Ποσό (€)<input type="number" step="0.01" min="0.01" name="amount" value="{{ request.form.get('amount') or (suggested[selected] if selected in suggested and suggested[selected] != '0.00' else '') }}" required></label>
+    <label>Ποσό (€)<input type="number" step="0.01" min="0.01" name="amount" value="{{ request.form.get('amount') or ((credits if selected_kind == 'refund' else suggested)[selected] if selected in suggested and (credits if selected_kind == 'refund' else suggested)[selected] != '0.00' else '') }}" required></label>
     <label>Από / Προς <span class="optional-label">Προαιρετικό</span><input name="party_name" maxlength="100" value="{{ request.form.get('party_name', '') }}" placeholder="Ονοματεπώνυμο"></label>
     <label class="span-2">Αιτιολογία <span class="optional-label">Προαιρετικό</span><input name="notes" maxlength="200" value="{{ request.form.get('notes', '') }}" placeholder="π.χ. Κοινόχρηστα Ιουνίου–Ιουλίου"></label>
     <button>Καταχώρηση και απόδειξη</button>

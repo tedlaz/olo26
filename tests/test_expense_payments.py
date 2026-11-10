@@ -139,6 +139,9 @@ def test_payment_routes_guard_cash_and_print(app, client):
     )
     assert response.status_code == 302
     assert "Εκτύπωση απόδειξης πληρωμής" in client.get(response.headers["Location"]).text
+    period_page = client.get(f"/periods/{period_id}").text
+    assert 'class="paid-icon partial"' in period_page
+    assert 'title="Πληρωμένα 50.00 από 80.00 € · υπόλοιπο 30.00 €"' in period_page
 
     with app.app_context():
         payment = db.session.scalar(db.select(ExpensePayment))

@@ -167,3 +167,64 @@ def add_cash_ledger_columns():
         db.session.execute(text(statement))
     db.session.commit()
     return backup_path
+
+
+OLD_CASH_KINDS = "kind IN ('collection', 'reserve_in', 'reserve_out')"
+NEW_CASH_KINDS = "kind IN ('collection', 'reserve_in', 'reserve_out', 'refund')"
+
+
+def allow_credit_refunds():
+    """Let cash_entries.kind be 'refund' (paying back an apartment's credit).
+
+    SQLite cannot change a CHECK constraint, so the table is rebuilt the documented way:
+    new table, copy rows, drop old, rename, recreate indexes, all in one transaction with
+    foreign keys off, then a foreign_key_check before committing.
+    """
+    if db.engine.url.get_backend_name() != "sqlite":
+        return None
+    table_sql = db.session.execute(
+        text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cash_entries'")
+    ).scalar()
+    if table_sql is None or OLD_CASH_KINDS not in table_sql:
+        return None
+    index_sql = (
+        db.session.execute(
+            text(
+                "SELECT sql FROM sqlite_master"
+                " WHERE type = 'index' AND tbl_name = 'cash_entries' AND sql IS NOT NULL"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    db.session.commit()
+    backup_path = _backup_sqlite_database("before-credit-refunds")
+    new_sql = table_sql.replace(OLD_CASH_KINDS, NEW_CASH_KINDS).replace(
+        "CREATE TABLE cash_entries", "CREATE TABLE cash_entries_rebuild", 1
+    )
+    connection = db.engine.raw_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        try:
+            cursor.execute("BEGIN")
+            cursor.execute(new_sql)
+            cursor.execute("INSERT INTO cash_entries_rebuild SELECT * FROM cash_entries")
+            cursor.execute("DROP TABLE cash_entries")
+            cursor.execute("ALTER TABLE cash_entries_rebuild RENAME TO cash_entries")
+            for statement in index_sql:
+                cursor.execute(statement)
+            violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise RuntimeError(
+                    f"Η αναδόμηση του cash_entries παραβίασε foreign keys: {violations}"
+                )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        connection.close()
+    return backup_path

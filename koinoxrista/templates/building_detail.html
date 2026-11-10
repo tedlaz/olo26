@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "_modal.html" import modal %}
 {% block title %}{{ building.name }}{% endblock %}
 {% block content %}
@@ -88,20 +89,26 @@
 <section class="card"><div class="section-head"><h2>Ανεξόφλητες δαπάνες</h2></div>
   <div class="table-wrap"><table>
     <thead><tr><th>Περίοδος</th><th>Ημ/νία</th><th>Περιγραφή</th><th class="numeric">Ποσό</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
-    <tbody>{% for expense in report.payable_expenses %}<tr><td><a href="{{ url_for('main.period_detail', period_id=expense.period_id) }}">No {{ expense.period.number }}</a>{% if expense.period.status == 'draft' %} <span class="status">Πρόχειρη</span>{% endif %}</td><td>{{ expense.invoice_date.strftime('%d/%m/%Y') }}</td><td>{{ expense.description }}</td><td class="numeric">{{ '%.2f'|format(expense.amount) }} €</td><td class="numeric">{{ '%.2f'|format(expense.amount - expense.paid) }} €</td><td class="numeric"><a class="expense-action-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=expense.id) }}">Πληρωμή</a></td></tr>
+    <tbody>{% for expense in report.payable_expenses %}<tr><td><a href="{{ url_for('main.period_detail', period_id=expense.period_id) }}">No {{ expense.period.number }}</a>{% if expense.period.status == 'draft' %} <span class="status">Πρόχειρη</span>{% endif %}</td><td>{{ expense.invoice_date.strftime('%d/%m/%Y') }}</td><td>{{ expense.description }}</td><td class="numeric">{{ '%.2f'|format(expense.amount) }} €</td><td class="numeric">{{ '%.2f'|format(expense.amount - expense.paid) }} €</td><td class="numeric"><a class="expense-action-badge icon-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=expense.id) }}" title="Πληρωμή" aria-label="Πληρωμή">{{ icon('pay') }}</a></td></tr>
     {% endfor %}</tbody>
   </table></div>
 </section>
 {% endif %}
 {% set balances = cash.rows|rejectattr('balance', 'equalto', 0)|list %}
 {% if balances %}
+{% set debit = balances|selectattr('balance', 'gt', 0)|sum(attribute='balance') %}
+{% set credit = -(balances|selectattr('balance', 'lt', 0)|sum(attribute='balance')) %}
+{% set net = debit - credit %}
 <section class="card"><div class="section-head"><h2>Υπόλοιπα διαμερισμάτων</h2></div>
   <div class="table-wrap"><table>
-    <thead><tr><th>Διαμέρισμα</th><th class="numeric">Υπόλοιπο</th><th></th></tr></thead>
-    <tbody>{% for row in balances %}<tr><td><a href="{{ url_for('main.apartment_ledger_view', apartment_id=row.apartment.id) }}">{{ row.apartment.display_label() }}</a></td><td class="numeric">{{ '%.2f'|format(row.balance) }} €{% if row.balance < 0 %} <span class="optional-label">πίστωση</span>{% endif %}</td><td class="numeric">{% if row.balance > 0 %}<a class="expense-action-badge" data-modal href="{{ url_for('main.cash_entry_new', building_id=building.id, apartment_id=row.apartment.id) }}">Είσπραξη</a>{% endif %}</td></tr>{% endfor %}</tbody>
-    <tfoot><tr><th>Σύνολο</th><th class="numeric">{{ '%.2f'|format(balances|sum(attribute='balance')) }} €</th><th></th></tr></tfoot>
+    <thead><tr><th>Διαμέρισμα</th><th class="numeric">Χρεωστικό</th><th class="numeric">Πιστωτικό</th><th></th></tr></thead>
+    <tbody>{% for row in balances %}<tr><td><a href="{{ url_for('main.apartment_ledger_view', apartment_id=row.apartment.id) }}">{{ row.apartment.display_label() }}</a></td><td class="numeric">{% if row.balance > 0 %}{{ '%.2f'|format(row.balance) }} €{% endif %}</td><td class="numeric">{% if row.balance < 0 %}{{ '%.2f'|format(-row.balance) }} €{% endif %}</td><td class="numeric">{% if row.balance > 0 %}<a class="expense-action-badge" data-modal href="{{ url_for('main.cash_entry_new', building_id=building.id, apartment_id=row.apartment.id) }}">Είσπραξη</a>{% else %}<a class="expense-action-badge" data-modal href="{{ url_for('main.cash_entry_new', building_id=building.id, apartment_id=row.apartment.id, kind='refund') }}">Επιστροφή</a>{% endif %}</td></tr>{% endfor %}</tbody>
+    <tfoot>
+      <tr><th>Σύνολο</th><th class="numeric">{{ '%.2f'|format(debit) }} €</th><th class="numeric">{{ '%.2f'|format(credit) }} €</th><th></th></tr>
+      <tr><th>Υπόλοιπο</th><th class="numeric">{% if net > 0 %}{{ '%.2f'|format(net) }} €{% endif %}</th><th class="numeric">{% if net < 0 %}{{ '%.2f'|format(-net) }} €{% endif %}{% if net == 0 %}0.00 €{% endif %}</th><th></th></tr>
+    </tfoot>
   </table></div>
-  <p>Θετικό υπόλοιπο σημαίνει οφειλή, αρνητικό πίστωση. Διαμερίσματα με μηδενικό υπόλοιπο δεν εμφανίζονται.</p>
+  <p>Χρεωστικό: όσα οφείλει το διαμέρισμα. Πιστωτικό: όσα έχει πληρώσει παραπάνω· συμψηφίζεται αυτόματα με τα επόμενα κοινόχρηστα ή επιστρέφεται με «Επιστροφή». Διαμερίσματα με μηδενικό υπόλοιπο δεν εμφανίζονται.</p>
 </section>
 {% endif %}
 <section class="card"><div class="section-head"><h2>Βιβλίο ταμείου <span class="optional-label">νεότερες κινήσεις πρώτα</span></h2></div>

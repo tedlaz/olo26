@@ -1059,6 +1059,12 @@ label.checkbox {
   cursor: help;
 }
 
+.paid-icon.partial {
+  border-color: var(--warn-line);
+  color: var(--warn-ink);
+  background: var(--warn-soft);
+}
+
 .expense-payee {
   display: block;
   margin-top: 2px;
@@ -1395,8 +1401,8 @@ tfoot td {
 .expense-row-actions {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin-left: 12px;
+  gap: 6px;
+  margin-left: 8px;
   font-size: 0.79rem;
   font-weight: 700;
 }
@@ -1418,6 +1424,17 @@ tfoot td {
   font-size: 0.76rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.expense-action-badge.icon-badge {
+  width: 26px;
+  min-height: 26px;
+  justify-content: center;
+  padding: 0;
+}
+
+.expense-action-badge .icon {
+  display: block;
 }
 
 .expense-action-badge:hover {

@@ -762,9 +762,11 @@ def cash_entry_new(building_id):
             amount = parse_amount(request.form.get("amount", ""), "ποσό")
             if amount <= 0:
                 raise ValueError("Το ποσό πρέπει να είναι θετικό.")
-            if kind == "reserve_out":
-                if amount > apartment_position(apartment)[1]:
-                    raise ValueError("Το ποσό ξεπερνά το αποθεματικό του διαμερίσματος.")
+            if kind == "reserve_out" and amount > apartment_position(apartment)[1]:
+                raise ValueError("Το ποσό ξεπερνά το αποθεματικό του διαμερίσματος.")
+            if kind == "refund" and amount > -apartment_position(apartment)[0]:
+                raise ValueError("Το ποσό ξεπερνά την πίστωση του διαμερίσματος.")
+            if kind in CashEntry.OUTFLOWS:
                 require_cash(building, add=(entry_date, -amount))
             entry = CashEntry(
                 building=building,
@@ -795,13 +797,17 @@ def cash_entry_new(building_id):
             message = form_error(exc, "Ο αριθμός απόδειξης δόθηκε ήδη. Δοκιμάστε ξανά.")
             flash(f"Δεν καταχωρήθηκε η κίνηση: {message}", "error")
     selected = request.form.get("apartment_id") or request.args.get("apartment_id", "")
-    suggested = {str(item.id): f"{max(apartment_position(item)[0], 0):.2f}" for item in apartments}
+    balances = {str(item.id): apartment_position(item)[0] for item in apartments}
+    suggested = {key: f"{max(value, 0):.2f}" for key, value in balances.items()}
+    credits = {key: f"{max(-value, 0):.2f}" for key, value in balances.items()}
     return render_template(
         "cash_entry_form.html",
         building=building,
         apartments=apartments,
         selected=selected,
         suggested=suggested,
+        credits=credits,
+        selected_kind=request.form.get("kind") or request.args.get("kind", "collection"),
         kinds=CashEntry.KINDS,
         today=date.today(),
     )
@@ -853,7 +859,7 @@ def cash_entry_void(entry_id):
         else None
     )
     try:
-        if entry.kind != "reserve_out" and linked is None:
+        if entry.kind not in CashEntry.OUTFLOWS and linked is None:
             require_cash(entry.building, skip=entry)
         blocked = None
     except ValueError as exc:

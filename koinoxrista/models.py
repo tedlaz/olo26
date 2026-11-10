@@ -294,7 +294,8 @@ class CashEntry(db.Model):
     __table_args__ = (
         UniqueConstraint("building_id", "number", name="uq_cash_entries_building_number"),
         CheckConstraint(
-            "kind IN ('collection', 'reserve_in', 'reserve_out')", name="valid_cash_entry_kind"
+            "kind IN ('collection', 'reserve_in', 'reserve_out', 'refund')",
+            name="valid_cash_entry_kind",
         ),
         CheckConstraint("amount > 0", name="positive_cash_entry_amount"),
     )
@@ -303,7 +304,9 @@ class CashEntry(db.Model):
         "collection": "Είσπραξη κοινοχρήστων",
         "reserve_in": "Κατάθεση αποθεματικού",
         "reserve_out": "Επιστροφή αποθεματικού",
+        "refund": "Επιστροφή πίστωσης",
     }
+    OUTFLOWS = ("reserve_out", "refund")
 
     id = db.Column(db.Integer, primary_key=True)
     building_id = db.Column(db.ForeignKey("buildings.id"), nullable=False, index=True)

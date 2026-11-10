@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "_modal.html" import modal %}
 {% block title %}Περίοδος {{ period.issue_date }}{% endblock %}
 {% block content %}
@@ -75,10 +76,10 @@
               {{ row.expense.description }}
               {% if period.status == 'draft' and role == 'admin' %}
                 <span class="expense-row-actions">
-                  <a class="expense-action-badge" data-modal href="{{ url_for('main.expense_edit', expense_id=row.expense.id) }}">Διόρθωση</a>
+                  <a class="expense-action-badge icon-badge" data-modal href="{{ url_for('main.expense_edit', expense_id=row.expense.id) }}" title="Διόρθωση" aria-label="Διόρθωση">{{ icon('edit') }}</a>
                   {% if not row.expense.payments %}<form class="mini-form" method="post" action="{{ url_for('main.expense_delete', expense_id=row.expense.id) }}" data-confirm="Να διαγραφεί οριστικά αυτή η δαπάνη;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="expense-action-badge danger">Διαγραφή</button>
+                    <button class="expense-action-badge icon-badge danger" title="Διαγραφή" aria-label="Διαγραφή">{{ icon('delete') }}</button>
                   </form>{% endif %}
                 </span>
               {% endif %}
@@ -86,7 +87,7 @@
                 {% set paid = row.expense.paid %}
                 <span class="expense-row-actions">
                   {% if row.expense.amount > 0 and paid >= row.expense.amount %}{% set paid_hint = 'Πληρωμένη: %.2f € · τελευταία πληρωμή %s'|format(paid, (row.expense.payments|rejectattr('voided_at')|map(attribute='date')|max).strftime('%d/%m/%Y')) %}<span class="paid-icon" role="img" title="{{ paid_hint }}" aria-label="{{ paid_hint }}">✓</span>
-                  {% elif row.expense.amount > 0 %}{% if paid > 0 %}<span class="status">Πληρωμένα {{ '%.2f'|format(paid) }} €</span>{% endif %}<a class="expense-action-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=row.expense.id) }}">Πληρωμή</a>{% endif %}
+                  {% elif row.expense.amount > 0 %}{% if paid > 0 %}{% set partial_hint = 'Πληρωμένα %.2f από %.2f € · υπόλοιπο %.2f €'|format(paid, row.expense.amount, row.expense.amount - paid) %}<span class="paid-icon partial" role="img" title="{{ partial_hint }}" aria-label="{{ partial_hint }}">{{ icon('partial') }}</span>{% endif %}<a class="expense-action-badge icon-badge" data-modal href="{{ url_for('main.expense_pay', expense_id=row.expense.id) }}" title="Πληρωμή" aria-label="Πληρωμή">{{ icon('pay') }}</a>{% endif %}
                 </span>
               {% endif %}
               {% if row.expense.payee %}<small class="expense-payee">{{ row.expense.payee.name }}</small>{% endif %}
