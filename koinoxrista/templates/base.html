@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="el">
+<html lang="el" data-theme="{{ current_theme }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,9 +9,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=4) }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=24) }}">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/gr.js" defer></script>
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-  <script src="{{ url_for('static', filename='app.js', v=4) }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js', v=9) }}" defer></script>
+  <script src="{{ url_for('static', filename='building_wizard.js', v=7) }}" defer></script>
 </head>
 <body hx-boost="true">
   <header class="topbar">
@@ -24,8 +28,14 @@
         <a class="nav-link{% if request.endpoint not in ('main.admin_users', 'main.admin_database') %} active{% endif %}" href="{{ url_for('main.dashboard') }}">Κτίρια</a>
         {% if current_user.is_system_admin %}<a class="nav-link{% if request.endpoint == 'main.admin_users' %} active{% endif %}" href="{{ url_for('main.admin_users') }}">Χρήστες</a>{% endif %}
         {% if current_user.is_system_admin %}<a class="nav-link{% if request.endpoint == 'main.admin_database' %} active{% endif %}" href="{{ url_for('main.admin_database') }}">Backup</a>{% endif %}
+        <form method="post" action="{{ url_for('auth.set_theme') }}" hx-boost="false" class="theme-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="visually-hidden" for="theme-select">Θέμα</label>
+          <select id="theme-select" name="theme" onchange="this.form.submit()" title="Θέμα εμφάνισης">{% for value, label in themes.items() %}<option value="{{ value }}" {% if value == current_theme %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          <noscript><button>OK</button></noscript>
+        </form>
         <span class="user-name">{{ current_user.display_name }}</span>
-        <form method="post" action="{{ url_for('auth.logout') }}">
+        <form method="post" action="{{ url_for('auth.logout') }}" hx-boost="false">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="logout-button">Έξοδος</button>
         </form>
@@ -43,5 +53,9 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <dialog id="modal" class="modal wide" aria-label="Φόρμα">
+    <header class="modal-head"><span></span><button type="button" class="modal-close" data-close aria-label="Κλείσιμο">&times;</button></header>
+    <div class="modal-body"></div>
+  </dialog>
 </body>
 </html>

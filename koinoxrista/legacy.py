@@ -180,6 +180,7 @@ def import_legacy(building: Building, path):
             manager = manager_map[row["diaxeiristis_id"]]
             item = Period(
                 id=row["id"],
+                number=row["id"],  # keep the old system's "No"
                 building=building,
                 issue_date=date.fromisoformat(row["ekdosi"]),
                 comments=row["sxolia"],

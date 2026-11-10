@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from flask_login import UserMixin
-from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint, event, func, select
+from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db
@@ -23,6 +24,7 @@ class User(UserMixin, db.Model):
     can_create_building = db.Column(db.Boolean, nullable=False, default=False)
     is_active_account = db.Column(db.Boolean, nullable=False, default=True)
     must_change_password = db.Column(db.Boolean, nullable=False, default=False)
+    theme = db.Column(db.String(20), nullable=False, default="light", server_default="light")
     auth_version = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
@@ -190,11 +192,14 @@ class Period(db.Model):
     __tablename__ = "periods"
     __table_args__ = (
         UniqueConstraint("building_id", "issue_date"),
+        UniqueConstraint("building_id", "number", name="uq_periods_building_number"),
         CheckConstraint("status IN ('draft', 'finalized')", name="valid_status"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     building_id = db.Column(db.ForeignKey("buildings.id"), nullable=False, index=True)
+    # "No" shown to users: 1, 2, 3, … within each building (assigned on insert, see below)
+    number = db.Column(db.Integer)
     issue_date = db.Column(db.Date, nullable=False)
     comments = db.Column(db.Text, nullable=False, default="")
     status = db.Column(db.String(20), nullable=False, default="draft")
@@ -261,3 +266,36 @@ class AuditLog(db.Model):
     action = db.Column(db.String(100), nullable=False)
     details = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+@event.listens_for(Session, "before_flush")
+def number_new_periods(session, _flush_context, _instances):
+    """Give every new period the next number of its building, whatever code created it.
+
+    ponytail: max()+1 per flush; two admins creating a period in the same building at the
+    same instant would hit the unique constraint (the save fails, nothing is corrupted).
+    """
+    pending = [item for item in session.new if isinstance(item, Period) and item.number is None]
+    next_number = {}
+    # explicit ids first (the legacy import keeps the old system's order), then by date
+    for period in sorted(
+        pending, key=lambda p: (p.id is None, p.id or 0, p.issue_date or date.min)
+    ):
+        building = period.building
+        building_id = (
+            period.building_id if period.building_id is not None else getattr(building, "id", None)
+        )
+        key = building_id if building_id is not None else id(building)
+        if key not in next_number:
+            current = 0
+            if building_id is not None:
+                with session.no_autoflush:
+                    current = (
+                        session.scalar(
+                            select(func.max(Period.number)).where(Period.building_id == building_id)
+                        )
+                        or 0
+                    )
+            next_number[key] = current
+        next_number[key] += 1
+        period.number = next_number[key]

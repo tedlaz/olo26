@@ -96,3 +96,37 @@ def drop_period_legacy_id():
     db.session.execute(text("ALTER TABLE periods DROP COLUMN legacy_id"))
     db.session.commit()
     return backup_path
+
+
+def add_period_numbers():
+    """Add periods.number: 1..N per building in creation order.
+
+    Buildings imported from the old system keep its numbers (the normalized ids, which
+    start at 1 but may have gaps), so already printed receipts still match.
+    """
+    period_columns = {column["name"] for column in inspect(db.engine).get_columns("periods")}
+    if "number" in period_columns:
+        return None
+    backup_path = _backup_sqlite_database("before-period-numbers")
+    db.session.execute(text("ALTER TABLE periods ADD COLUMN number INTEGER"))
+    db.session.execute(
+        text(
+            "UPDATE periods SET number = ("
+            " SELECT COUNT(*) FROM periods AS earlier"
+            " WHERE earlier.building_id = periods.building_id AND earlier.id <= periods.id)"
+        )
+    )
+    db.session.execute(
+        text(
+            "UPDATE periods SET number = id WHERE building_id IN"
+            " (SELECT id FROM buildings WHERE legacy_imported_at IS NOT NULL)"
+        )
+    )
+    db.session.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_periods_building_number"
+            " ON periods (building_id, number)"
+        )
+    )
+    db.session.commit()
+    return backup_path

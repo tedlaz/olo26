@@ -1,20 +1,29 @@
 {% extends "base.html" %}
+{% from "_modal.html" import modal %}
 {% block title %}{{ building.name }}{% endblock %}
 {% block content %}
+{% set tabs = [
+  ('periods', 'Περίοδοι', periods_pagination.total),
+  ('apartments', 'Διαμερίσματα', building.apartments|length),
+  ('categories', 'Κατηγορίες', building.categories|length),
+  ('managers', 'Διαχειριστές', managers|length),
+] %}
+{% set tab = request.args.get('tab') if request.args.get('tab') in ['periods', 'apartments', 'categories', 'managers'] else 'periods' %}
 <div class="page-head">
   <div><p class="eyebrow">{{ building.address }} · {{ building.postal_code }}</p><h1>{{ building.name }}</h1></div>
-  {% if role in ('editor', 'building_admin') %}<div class="actions">{% if role == 'building_admin' %}<a class="button secondary" href="{{ url_for('main.building_members', building_id=building.id) }}">Μέλη</a>{% endif %}<a class="button secondary" href="{{ url_for('main.millesimals', building_id=building.id) }}">Μήτρα χιλιοστών</a><a class="button" href="{{ url_for('main.period_create', building_id=building.id) }}">Νέα περίοδος</a></div>{% endif %}
+  {% if role == 'admin' %}<div class="actions"><button type="button" class="secondary" data-open="dlg-building">Στοιχεία κτιρίου</button><button type="button" class="secondary danger" data-open="dlg-delete">Διαγραφή κτιρίου</button></div>{% endif %}
 </div>
-<div class="stats">
-  <article><span>Διαμερίσματα</span><strong>{{ building.apartments|length }}</strong></article>
-  <article><span>Κατηγορίες</span><strong>{{ building.categories|length }}</strong></article>
-  <article><span>Περίοδοι</span><strong>{{ periods_pagination.total }}</strong></article>
-</div>
-{% if role in ('editor', 'building_admin') %}<details class="card"><summary><strong>Επεξεργασία στοιχείων κτιρίου και εμφάνισης</strong></summary><form method="post" action="{{ url_for('main.building_update', building_id=building.id) }}" class="compact-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Ονομασία<input name="name" value="{{ building.name }}" required></label><label>Διεύθυνση<input name="address" value="{{ building.address }}" required></label><label>ΤΚ<input name="postal_code" value="{{ building.postal_code }}" required></label><label>Εμφάνιση διαμερισμάτων<select name="apartment_display_mode"><option value="occupant" {% if building.apartment_display_mode == 'occupant' %}selected{% endif %}>Αριθμός + ένοικος</option><option value="owner" {% if building.apartment_display_mode == 'owner' %}selected{% endif %}>Αριθμός + ιδιοκτήτης</option><option value="name" {% if building.apartment_display_mode == 'name' %}selected{% endif %}>Αριθμός + ονομασία</option></select></label><button>Αποθήκευση</button></form></details>{% endif %}
 
-<section class="card"><div class="section-head"><h2>Περίοδοι</h2></div>
+<nav class="tabs" aria-label="Ενότητες κτιρίου">
+  {% for key, label, count in tabs %}<a class="tab{% if key == tab %} active{% endif %}" href="{{ url_for('main.building_detail', building_id=building.id, tab=key) }}" {% if key == tab %}aria-current="page"{% endif %}>{{ label }} <span class="tab-count">{{ count }}</span></a>{% endfor %}
+</nav>
+
+{% if role == 'admin' %}{% call modal('dlg-building', 'Στοιχεία κτιρίου και εμφάνιση') %}<form method="post" action="{{ url_for('main.building_update', building_id=building.id) }}" class="stack"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="span-2">Ονομασία<input name="name" value="{{ building.name }}" required></label><label>ΤΚ<input name="postal_code" value="{{ building.postal_code }}" required></label><label class="span-2">Διεύθυνση<input name="address" value="{{ building.address }}" required></label><label>Εμφάνιση διαμερισμάτων<select name="apartment_display_mode"><option value="occupant" {% if building.apartment_display_mode == 'occupant' %}selected{% endif %}>Αριθμός + ένοικος</option><option value="owner" {% if building.apartment_display_mode == 'owner' %}selected{% endif %}>Αριθμός + ιδιοκτήτης</option><option value="name" {% if building.apartment_display_mode == 'name' %}selected{% endif %}>Αριθμός + ονομασία</option></select></label><button>Αποθήκευση</button></form>{% endcall %}{% endif %}
+
+{% if tab == 'periods' %}
+<section class="card"><div class="section-head"><h2>Περίοδοι</h2>{% if role == 'admin' %}<a class="button" data-modal href="{{ url_for('main.period_create', building_id=building.id) }}">Νέα περίοδος</a>{% endif %}</div>
   <div class="table-wrap"><table><thead><tr><th>Έκδοση</th><th>No</th><th>Σχόλια</th><th>Κατάσταση</th><th class="numeric">Σύνολο</th></tr></thead><tbody>
-    {% for period in periods %}<tr><td><a href="{{ url_for('main.period_detail', period_id=period.id) }}">{{ period.issue_date.strftime('%d/%m/%Y') }}</a></td><td>{{ period.id }}</td><td>{{ period.comments }}</td><td><span class="status {{ period.status }}">{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</span></td><td class="numeric">{{ '%.2f'|format(period.total) }} €</td></tr>
+    {% for period in periods %}<tr><td><a href="{{ url_for('main.period_detail', period_id=period.id) }}">{{ period.issue_date.strftime('%d/%m/%Y') }}</a></td><td>{{ period.number }}</td><td>{{ period.comments }}</td><td><span class="status {{ period.status }}">{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</span></td><td class="numeric">{{ '%.2f'|format(period.total) }} €</td></tr>
     {% else %}<tr><td colspan="5">Δεν υπάρχουν περίοδοι.</td></tr>{% endfor %}
   </tbody></table></div>
   {% if periods_pagination.pages > 1 %}
@@ -30,37 +39,63 @@
   {% endif %}
 </section>
 
-<div class="two-col">
-  <section class="card"><div class="section-head"><h2>Διαμερίσματα</h2></div>
-    <ul class="clean-list">{% for item in building.apartments|sort(attribute='number') %}<li><div><strong>{{ item.display_label() }}</strong><span>{{ item.floor }}ος όροφος · {{ item.square_meters }} m²</span></div>{% if role in ('editor', 'building_admin') %}<a href="{{ url_for('main.apartment_edit', apartment_id=item.id) }}">Διόρθωση</a>{% endif %}</li>{% else %}<li>Δεν υπάρχουν διαμερίσματα.</li>{% endfor %}</ul>
-    {% if role in ('editor', 'building_admin') %}
-    <div class="add-apartment-panel">
-      <div class="add-apartment-heading">
-        <span class="add-apartment-icon" aria-hidden="true">+</span>
-        <div><h3>Νέο διαμέρισμα</h3><p>Συμπλήρωσε τα βασικά στοιχεία. Ιδιοκτήτης και ένοικος μπορούν να προστεθούν και αργότερα.</p></div>
-      </div>
-      <form method="post" action="{{ url_for('main.apartment_add', building_id=building.id) }}" class="apartment-create-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Αριθμός διαμερίσματος<input type="number" name="number" placeholder="π.χ. 6" required></label>
-        <label>Ονομασία<input name="name" placeholder="π.χ. Διαμέρισμα 6" required></label>
-        <label>Όροφος<input type="number" name="floor" placeholder="π.χ. 2" value="0" required></label>
-        <label>Τετραγωνικά μέτρα<input type="number" step="0.01" min="0" name="square_meters" placeholder="π.χ. 85,50" required></label>
-        <label>Ιδιοκτήτης <span class="optional-label">Προαιρετικό</span><input name="owner" placeholder="Ονοματεπώνυμο ιδιοκτήτη"></label>
-        <label>Ένοικος <span class="optional-label">Προαιρετικό</span><input name="occupant" placeholder="Ονοματεπώνυμο ενοίκου"></label>
-        <div class="apartment-form-action"><button>Προσθήκη διαμερίσματος</button></div>
-      </form>
-    </div>
-    {% endif %}
-  </section>
-  <section class="card"><div class="section-head"><h2>Κατηγορίες</h2>{% if role in ('editor', 'building_admin') %}<a href="{{ url_for('main.category_add', building_id=building.id) }}">Νέα</a>{% endif %}</div>
-    <ul class="clean-list">{% for item in building.categories %}<li><strong>{{ item.name }}</strong></li>{% else %}<li>Δεν υπάρχουν κατηγορίες.</li>{% endfor %}</ul>
-  </section>
-</div>
-
-<section class="card"><div class="section-head"><h2>Διαχειριστές</h2></div>
-  <ul class="clean-list">{% for item in managers %}<li><strong>{{ item.display_name }}</strong><span>{{ item.date_from.strftime('%d/%m/%Y') }}{% if item.date_to %} – {{ item.date_to.strftime('%d/%m/%Y') }}{% else %} – σήμερα{% endif %}</span></li>{% endfor %}</ul>
-  {% if role == 'building_admin' and eligible_users %}<form method="post" action="{{ url_for('main.manager_assign', building_id=building.id) }}" class="inline-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="user_id" required>{% for user in eligible_users %}<option value="{{ user.id }}">{{ user.display_name }} ({{ user.email }})</option>{% endfor %}</select><input type="date" name="date_from" required><button>Νέα θητεία</button>
-  </form>{% endif %}
+{% elif tab == 'apartments' %}
+<section class="card"><div class="section-head"><h2>Διαμερίσματα</h2>{% if role == 'admin' %}<button type="button" data-open="dlg-apartment">Νέο διαμέρισμα</button>{% endif %}</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="numeric">Αρ.</th><th>Ονομασία</th><th class="numeric">Όροφος</th><th class="numeric">m²</th><th>Ιδιοκτήτης</th><th>Ένοικος</th>{% if role == 'admin' %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for item in building.apartments|sort(attribute='number') %}
+      <tr><td class="numeric">{{ item.number }}</td><td>{{ item.name }}</td><td class="numeric">{{ item.floor }}</td><td class="numeric">{{ '%.2f'|format(item.square_meters) }}</td><td>{{ item.owner or '—' }}</td><td>{{ item.occupant or '—' }}</td>{% if role == 'admin' %}<td class="numeric"><a class="expense-action-badge" data-modal href="{{ url_for('main.apartment_edit', apartment_id=item.id) }}">Διόρθωση</a></td>{% endif %}</tr>
+    {% else %}
+      <tr><td colspan="{{ 7 if role == 'admin' else 6 }}">Δεν υπάρχουν διαμερίσματα.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if building.apartments %}<tfoot><tr><th colspan="3">Σύνολο</th><th class="numeric">{{ '%.2f'|format(building.apartments|sum(attribute='square_meters')) }}</th><th colspan="{{ 3 if role == 'admin' else 2 }}"></th></tr></tfoot>{% endif %}
+  </table></div>
 </section>
+
+{% elif tab == 'categories' %}
+<section class="card"><div class="section-head"><h2>Κατηγορίες</h2>{% if role == 'admin' %}<div class="actions"><a class="button secondary" data-modal href="{{ url_for('main.millesimals', building_id=building.id) }}">Μήτρα χιλιοστών</a><a class="button" data-modal href="{{ url_for('main.category_add', building_id=building.id) }}">Νέα κατηγορία</a></div>{% endif %}</div>
+  <ul class="clean-list">{% for item in building.categories %}<li><strong>{{ item.name }}</strong></li>{% else %}<li>Δεν υπάρχουν κατηγορίες.</li>{% endfor %}</ul>
+</section>
+
+{% else %}
+<section class="card"><div class="section-head"><h2>Διαχειριστές</h2>{% if role == 'admin' and eligible_users %}<button type="button" data-open="dlg-manager">Νέα θητεία</button>{% endif %}</div>
+  <ul class="clean-list">{% for item in managers %}<li><strong>{{ item.display_name }}</strong><span>{{ item.date_from.strftime('%d/%m/%Y') }}{% if item.date_to %} – {{ item.date_to.strftime('%d/%m/%Y') }}{% else %} – σήμερα{% endif %}</span></li>{% else %}<li>Δεν υπάρχουν διαχειριστές.</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if role == 'admin' %}
+{% call modal('dlg-delete', 'Διαγραφή κτιρίου') %}
+  <form method="post" action="{{ url_for('main.building_delete', building_id=building.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="restore-warning wide"><strong>Μη αναστρέψιμη ενέργεια</strong><span>Διαγράφονται οριστικά {{ periods_pagination.total }} περίοδοι με τις δαπάνες και κατανομές τους, {{ building.apartments|length }} διαμερίσματα, {{ building.categories|length }} κατηγορίες, οι διαχειριστές και οι προσβάσεις χρηστών. Πριν τη διαγραφή δημιουργείται αυτόματα backup της βάσης.</span></div>
+    <label class="span-2">Πληκτρολογήστε «{{ building.name }}»<input name="confirmation" autocomplete="off" required></label>
+    <label>Ο κωδικός σας<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="restore-button">Οριστική διαγραφή</button>
+  </form>
+{% endcall %}
+{% call modal('dlg-apartment', 'Νέο διαμέρισμα') %}
+  <form method="post" action="{{ url_for('main.apartment_add', building_id=building.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Αριθμός διαμερίσματος<input type="number" name="number" placeholder="π.χ. 6" required></label>
+    <label>Ονομασία<input name="name" placeholder="π.χ. Διαμέρισμα 6" required></label>
+    <label>Όροφος<input type="number" name="floor" value="0" required></label>
+    <label>Τετραγωνικά μέτρα<input type="number" step="0.01" min="0" name="square_meters" placeholder="π.χ. 85,50" required></label>
+    <label>Ιδιοκτήτης <span class="optional-label">Προαιρετικό</span><input name="owner"></label>
+    <label>Ένοικος <span class="optional-label">Προαιρετικό</span><input name="occupant"></label>
+    <button>Προσθήκη διαμερίσματος</button>
+  </form>
+{% endcall %}
+{% if eligible_users %}
+{% call modal('dlg-manager', 'Νέα θητεία διαχειριστή') %}
+  <form method="post" action="{{ url_for('main.manager_assign', building_id=building.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="span-2">Χρήστης<select name="user_id" required>{% for user in eligible_users %}<option value="{{ user.id }}">{{ user.display_name }} ({{ user.email }}){% if user.is_system_admin %} · Administrator{% endif %}</option>{% endfor %}</select></label>
+    <label>Από<input type="date" name="date_from" required></label>
+    <button>Αποθήκευση</button>
+  </form>
+{% endcall %}
+{% endif %}
+{% endif %}
 {% endblock %}

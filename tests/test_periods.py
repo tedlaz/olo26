@@ -50,7 +50,7 @@ def test_period_date_and_comments_can_be_edited(app, client):
         follow_redirects=False,
     )
 
-    assert f'/periods/{period_id}/edit' in page.text
+    assert f"/periods/{period_id}/edit" in page.text
     assert "Διόρθωση στοιχείων" in page.text
     assert response.status_code == 302
     assert response.headers["Location"].endswith(f"/periods/{period_id}")
@@ -75,3 +75,26 @@ def test_finalized_period_cannot_be_edited(app, client):
     assert "Διόρθωση στοιχείων" not in page.text
     assert get_response.status_code == 409
     assert post_response.status_code == 409
+
+
+def test_end_of_next_month():
+    from koinoxrista.main import end_of_next_month
+
+    assert end_of_next_month(date(2026, 8, 1)) == date(2026, 9, 30)
+    assert end_of_next_month(date(2026, 1, 31)) == date(2026, 2, 28)
+    assert end_of_next_month(date(2028, 1, 15)) == date(2028, 2, 29)
+    assert end_of_next_month(date(2026, 12, 31)) == date(2027, 1, 31)
+
+
+def test_new_period_form_suggests_end_of_month_after_latest_period(app, client):
+    period_id = create_period(app)  # latest period: 01/08/2026
+    login(client)
+    with app.app_context():
+        building_id = db.session.get(Period, period_id).building_id
+        db.session.add(
+            Period(building_id=building_id, issue_date=date(2026, 3, 31), status="finalized")
+        )
+        db.session.commit()
+
+    page = client.get(f"/buildings/{building_id}/periods/new").text
+    assert 'value="2026-09-30"' in page

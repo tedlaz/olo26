@@ -5,14 +5,14 @@
   <header class="wizard-heading">
     <p class="eyebrow">Νέο κτίριο</p>
     <h1>Δημιουργία κτιρίου</h1>
-    <p>Συμπληρώστε τα τέσσερα βήματα. Τίποτα δεν αποθηκεύεται πριν από την τελική δημιουργία.</p>
+    <p>Συμπληρώστε τα βήματα και ελέγξτε την ανακεφαλαίωση. Τίποτα δεν αποθηκεύεται πριν από την τελική δημιουργία.</p>
   </header>
 
   <ol class="wizard-progress" aria-label="Βήματα δημιουργίας">
     <li><button type="button" data-step-target="1"><span>1</span>Κτίριο</button></li>
     <li><button type="button" data-step-target="2"><span>2</span>Διαμερίσματα</button></li>
-    <li><button type="button" data-step-target="3"><span>3</span>Τύποι δαπανών</button></li>
-    <li><button type="button" data-step-target="4"><span>4</span>Μήτρα τιμών</button></li>
+    <li><button type="button" data-step-target="3"><span>3</span>Τύποι δαπανών &amp; χιλιοστά</button></li>
+    <li><button type="button" data-step-target="4"><span>4</span>Ανακεφαλαίωση</button></li>
   </ol>
 
   <form method="post" class="card wizard-card" data-wizard-form hx-boost="false" novalidate>
@@ -35,24 +35,24 @@
         <div><p class="eyebrow">Βήμα 2 από 4</p><h2>Στοιχεία διαμερισμάτων</h2></div>
         <button type="button" class="secondary" data-add-apartment>Προσθήκη διαμερίσματος</button>
       </div>
-      <p class="section-note">Καταχωρίστε όλα τα διαμερίσματα. Ο αριθμός κάθε διαμερίσματος πρέπει να είναι μοναδικός.</p>
+      <p class="section-note">Μία γραμμή ανά διαμέρισμα. Ο αριθμός συμπληρώνεται αυτόματα και πρέπει να είναι μοναδικός.</p>
       <div class="wizard-list" data-apartment-list></div>
     </section>
 
     <section class="wizard-panel" data-step="3" hidden>
       <div class="wizard-section-head">
-        <div><p class="eyebrow">Βήμα 3 από 4</p><h2>Τύποι δαπανών</h2></div>
+        <div><p class="eyebrow">Βήμα 3 από 4</p><h2>Τύποι δαπανών και χιλιοστά</h2></div>
         <button type="button" class="secondary" data-add-category>Προσθήκη τύπου</button>
       </div>
-      <p class="section-note">Προσθέστε τις κατηγορίες με τις οποίες θα καταχωρίζονται οι δαπάνες του κτιρίου.</p>
+      <p class="section-note">Μία στήλη ανά τύπο δαπάνης: γράψτε την ονομασία στην κεφαλίδα και τα χιλιοστά κάθε διαμερίσματος από κάτω. Κάθε στήλη πρέπει να αθροίζει ακριβώς 1000.</p>
       <div class="wizard-list category-list" data-category-list></div>
     </section>
 
     <section class="wizard-panel" data-step="4" hidden>
       <p class="eyebrow">Βήμα 4 από 4</p>
-      <h2>Μήτρα τιμών δαπανών</h2>
-      <p class="section-note">Συμπληρώστε τα χιλιοστά κάθε διαμερίσματος. Κάθε στήλη τύπου δαπάνης πρέπει να αθροίζει ακριβώς σε 1000.</p>
-      <div class="table-wrap wizard-matrix-wrap" data-matrix-container></div>
+      <h2>Ανακεφαλαίωση</h2>
+      <p class="section-note">Ελέγξτε όλα τα στοιχεία πριν τη δημιουργία. Με «Διόρθωση» επιστρέφετε στο αντίστοιχο βήμα χωρίς να χαθεί τίποτα.</p>
+      <div class="wizard-summary" data-summary></div>
     </section>
 
     <footer class="wizard-footer">
@@ -66,5 +66,4 @@
   </form>
 </section>
 <script type="application/json" data-wizard-initial>{{ initial_payload|tojson }}</script>
-<script src="{{ url_for('static', filename='building_wizard.js', v=2) }}" defer></script>
 {% endblock %}

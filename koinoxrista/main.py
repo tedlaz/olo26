@@ -1,3 +1,4 @@
+import calendar
 import json
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -55,7 +56,9 @@ from .services import (
     allocation_report,
     audit,
     build_allocations,
+    compute_allocations,
     create_building_graph,
+    delete_building,
     expense_report,
     replace_millesimals,
 )
@@ -68,6 +71,24 @@ def parse_date(value, label="ημερομηνία"):
         return date.fromisoformat(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Μη έγκυρη {label}.") from exc
+
+
+def form_error(exc, duplicate):
+    """User-facing text for a failed save: never database or parser internals."""
+    if isinstance(exc, IntegrityError):
+        return duplicate
+    if isinstance(exc, InvalidOperation) or (
+        isinstance(exc, ValueError)
+        and str(exc).startswith(("invalid literal", "could not convert"))
+    ):
+        return "Κάποιο αριθμητικό πεδίο δεν είναι έγκυρο."
+    return str(exc)
+
+
+APARTMENT_EXISTS = "Υπάρχει ήδη διαμέρισμα με αυτόν τον αριθμό."
+EXPENSE_EXISTS = "Υπάρχει ήδη δαπάνη με τον ίδιο αριθμό και ημερομηνία παραστατικού."
+PERIOD_EXISTS = "Υπάρχει ήδη περίοδος με αυτή την ημερομηνία έκδοσης."
+CATEGORY_EXISTS = "Υπάρχει ήδη κατηγορία με αυτή την ονομασία."
 
 
 def get_building(building_id, role="viewer"):
@@ -146,9 +167,8 @@ def initial_setup():
 
 @main.route("/buildings/new", methods=["GET", "POST"])
 @login_required
+@system_admin_required
 def building_create():
-    if not (current_user.is_system_admin or current_user.can_create_building):
-        abort(403)
     if request.method == "POST":
         raw_payload = request.form.get("wizard_payload", "")
         try:
@@ -173,6 +193,21 @@ def building_create():
     return render_template("building_form.html", initial_payload=None, initial_step=1)
 
 
+def manager_candidates(building_id):
+    """Active users who may manage the building: every administrator and the building's users."""
+    members = db.select(BuildingMembership.user_id).where(
+        BuildingMembership.building_id == building_id
+    )
+    return db.session.scalars(
+        db.select(User)
+        .where(
+            User.is_active_account.is_(True),
+            or_(User.is_system_admin.is_(True), User.id.in_(members)),
+        )
+        .order_by(User.display_name, User.email)
+    ).all()
+
+
 @main.get("/buildings/<int:building_id>")
 @login_required
 def building_detail(building_id):
@@ -193,12 +228,7 @@ def building_detail(building_id):
         .where(ManagerTerm.building_id == building.id)
         .order_by(ManagerTerm.date_from.desc())
     ).all()
-    eligible_users = db.session.scalars(
-        db.select(User)
-        .join(BuildingMembership)
-        .where(BuildingMembership.building_id == building.id, User.is_active_account.is_(True))
-        .order_by(User.email)
-    ).all()
+    eligible_users = manager_candidates(building.id)
     return render_template(
         "building_detail.html",
         building=building,
@@ -213,7 +243,7 @@ def building_detail(building_id):
 @main.post("/buildings/<int:building_id>/details")
 @login_required
 def building_update(building_id):
-    building = get_building(building_id, "editor")
+    building = get_building(building_id, "admin")
     name = request.form.get("name", "").strip()
     address = request.form.get("address", "").strip()
     postal_code = request.form.get("postal_code", "").strip()
@@ -233,46 +263,38 @@ def building_update(building_id):
     return redirect(url_for("main.building_detail", building_id=building.id))
 
 
-@main.route("/buildings/<int:building_id>/members", methods=["GET", "POST"])
+@main.post("/buildings/<int:building_id>/delete")
 @login_required
-def building_members(building_id):
-    building = get_building(building_id, "building_admin")
-    if request.method == "POST":
-        user = db.session.get(User, request.form.get("user_id", type=int))
-        role = request.form.get("role")
-        if not user or role not in {"viewer", "editor", "building_admin"}:
-            abort(400)
-        membership = db.session.scalar(
-            db.select(BuildingMembership).where(
-                BuildingMembership.building_id == building.id,
-                BuildingMembership.user_id == user.id,
-            )
-        )
-        if membership:
-            membership.role = role
-        else:
-            db.session.add(BuildingMembership(building_id=building.id, user_id=user.id, role=role))
-        audit("building_member_changed", current_user.id, building.id, f"{user.email}: {role}")
-        db.session.commit()
-        flash("Η πρόσβαση ενημερώθηκε.", "success")
-        return redirect(url_for("main.building_members", building_id=building.id))
-    memberships = db.session.scalars(
-        db.select(BuildingMembership)
-        .where(BuildingMembership.building_id == building.id)
-        .order_by(BuildingMembership.role, BuildingMembership.id)
-    ).all()
-    users = db.session.scalars(
-        db.select(User).where(User.is_active_account.is_(True)).order_by(User.email)
-    ).all()
-    return render_template(
-        "building_members.html", building=building, memberships=memberships, users=users
+@system_admin_required
+def building_delete(building_id):
+    building = db.get_or_404(Building, building_id)
+    back = redirect(url_for("main.building_detail", building_id=building.id))
+    if request.form.get("confirmation", "").strip() != building.name:
+        flash("Πληκτρολογήστε ακριβώς την ονομασία του κτιρίου για επιβεβαίωση.", "error")
+        return back
+    if not current_user.check_password(request.form.get("password", "")):
+        flash("Ο κωδικός σας δεν είναι σωστός.", "error")
+        return back
+    try:
+        backup_path = create_backup(prefix="before-building-delete")
+    except DatabaseMaintenanceError as exc:
+        flash(f"Η διαγραφή ακυρώθηκε γιατί δεν δημιουργήθηκε backup: {exc}", "error")
+        return back
+    name = building.name
+    delete_building(building)
+    audit("building_deleted", current_user.id, details=f"{name} · backup: {backup_path.name}")
+    db.session.commit()
+    flash(
+        f"Το κτίριο «{name}» διαγράφηκε. Backup πριν τη διαγραφή: {backup_path.name}",
+        "success",
     )
+    return redirect(url_for("main.dashboard"))
 
 
 @main.post("/buildings/<int:building_id>/apartments")
 @login_required
 def apartment_add(building_id):
-    building = get_building(building_id, "editor")
+    building = get_building(building_id, "admin")
     try:
         apartment = Apartment(
             building=building,
@@ -294,15 +316,15 @@ def apartment_add(building_id):
         flash("Το διαμέρισμα προστέθηκε. Ενημερώστε άμεσα τη μήτρα χιλιοστών.", "success")
     except (ValueError, InvalidOperation, IntegrityError) as exc:
         db.session.rollback()
-        flash(f"Δεν προστέθηκε το διαμέρισμα: {exc}", "error")
-    return redirect(url_for("main.building_detail", building_id=building.id))
+        flash(f"Δεν προστέθηκε το διαμέρισμα: {form_error(exc, APARTMENT_EXISTS)}", "error")
+    return redirect(url_for("main.building_detail", building_id=building.id, tab="apartments"))
 
 
 @main.route("/apartments/<int:apartment_id>/edit", methods=["GET", "POST"])
 @login_required
 def apartment_edit(apartment_id):
     apartment = db.get_or_404(Apartment, apartment_id)
-    require_role(apartment.building_id, "editor")
+    require_role(apartment.building_id, "admin")
     if request.method == "POST":
         try:
             name = request.form.get("name", "").strip()
@@ -322,21 +344,23 @@ def apartment_edit(apartment_id):
             )
             db.session.commit()
             flash("Τα στοιχεία του διαμερίσματος ενημερώθηκαν.", "success")
-            return redirect(url_for("main.building_detail", building_id=apartment.building_id))
+            return redirect(
+                url_for("main.building_detail", building_id=apartment.building_id, tab="apartments")
+            )
         except (ValueError, InvalidOperation, IntegrityError) as exc:
             db.session.rollback()
-            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {exc}", "error")
+            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {form_error(exc, APARTMENT_EXISTS)}", "error")
     return render_template("apartment_form.html", apartment=apartment)
 
 
 @main.route("/buildings/<int:building_id>/categories/new", methods=["GET", "POST"])
 @login_required
 def category_add(building_id):
-    building = get_building(building_id, "editor")
+    building = get_building(building_id, "admin")
     apartments = sorted(building.apartments, key=lambda item: (item.number, item.id))
     if not apartments:
         flash("Προσθέστε πρώτα τα διαμερίσματα του κτιρίου.", "error")
-        return redirect(url_for("main.building_detail", building_id=building.id))
+        return redirect(url_for("main.building_detail", building_id=building.id, tab="apartments"))
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         try:
@@ -352,18 +376,20 @@ def category_add(building_id):
                 db.session.add(Millesimal(apartment=apartment, category=category, value=value))
             audit("category_added", current_user.id, building.id, name)
             db.session.commit()
-            flash("Η κατηγορία προστέθηκε. Συμπληρώστε τα χιλιοστά της.", "success")
-            return redirect(url_for("main.building_detail", building_id=building.id))
+            flash("Η κατηγορία προστέθηκε.", "success")
+            return redirect(
+                url_for("main.building_detail", building_id=building.id, tab="categories")
+            )
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
-            flash(f"Δεν προστέθηκε η κατηγορία: {exc}", "error")
+            flash(f"Δεν προστέθηκε η κατηγορία: {form_error(exc, CATEGORY_EXISTS)}", "error")
     return render_template("category_form.html", building=building, apartments=apartments)
 
 
 @main.route("/buildings/<int:building_id>/millesimals", methods=["GET", "POST"])
 @login_required
 def millesimals(building_id):
-    building = get_building(building_id, "editor")
+    building = get_building(building_id, "admin")
     apartments = sorted(building.apartments, key=lambda item: (item.number, item.id))
     categories = sorted(building.categories, key=lambda item: item.id)
     existing = {
@@ -386,7 +412,9 @@ def millesimals(building_id):
             audit("millesimals_replaced", current_user.id, building.id)
             db.session.commit()
             flash("Η μήτρα αποθηκεύτηκε και όλες οι κατηγορίες αθροίζουν σε 1000.", "success")
-            return redirect(url_for("main.building_detail", building_id=building.id))
+            return redirect(
+                url_for("main.building_detail", building_id=building.id, tab="categories")
+            )
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
@@ -405,8 +433,9 @@ def millesimals(building_id):
 @main.post("/buildings/<int:building_id>/managers")
 @login_required
 def manager_assign(building_id):
-    building = get_building(building_id, "building_admin")
-    user = db.session.get(User, int(request.form.get("user_id", 0)))
+    building = get_building(building_id, "admin")
+    user_id = request.form.get("user_id", type=int)
+    user = next((item for item in manager_candidates(building.id) if item.id == user_id), None)
     if not user:
         abort(400)
     start = parse_date(request.form.get("date_from"))
@@ -418,7 +447,9 @@ def manager_assign(building_id):
     if active:
         if start <= active.date_from:
             flash("Η νέα θητεία πρέπει να αρχίζει μετά την τρέχουσα.", "error")
-            return redirect(url_for("main.building_detail", building_id=building.id))
+            return redirect(
+                url_for("main.building_detail", building_id=building.id, tab="managers")
+            )
         active.date_to = start - timedelta(days=1)
     db.session.add(
         ManagerTerm(
@@ -430,13 +461,29 @@ def manager_assign(building_id):
     )
     audit("manager_assigned", current_user.id, building.id, user.display_name)
     db.session.commit()
-    return redirect(url_for("main.building_detail", building_id=building.id))
+    return redirect(url_for("main.building_detail", building_id=building.id, tab="managers"))
+
+
+def end_of_next_month(day):
+    year, month = (day.year + 1, 1) if day.month == 12 else (day.year, day.month + 1)
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def suggested_issue_date(building_id):
+    """Last day of the month after the building's latest period (or of this month, if none)."""
+    latest = db.session.scalar(
+        db.select(db.func.max(Period.issue_date)).where(Period.building_id == building_id)
+    )
+    if latest is None:
+        today = date.today()
+        return date(today.year, today.month, calendar.monthrange(today.year, today.month)[1])
+    return end_of_next_month(latest)
 
 
 @main.route("/buildings/<int:building_id>/periods/new", methods=["GET", "POST"])
 @login_required
 def period_create(building_id):
-    building = get_building(building_id, "editor")
+    building = get_building(building_id, "admin")
     if request.method == "POST":
         try:
             issue_date = parse_date(request.form.get("issue_date"), "ημερομηνία έκδοσης")
@@ -461,15 +508,17 @@ def period_create(building_id):
             return redirect(url_for("main.period_detail", period_id=period.id))
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
-            flash(f"Δεν δημιουργήθηκε η περίοδος: {exc}", "error")
-    return render_template("period_form.html", building=building)
+            flash(f"Δεν δημιουργήθηκε η περίοδος: {form_error(exc, PERIOD_EXISTS)}", "error")
+    return render_template(
+        "period_form.html", building=building, suggested_date=suggested_issue_date(building.id)
+    )
 
 
 @main.route("/periods/<int:period_id>/edit", methods=["GET", "POST"])
 @login_required
 def period_edit(period_id):
     period = db.get_or_404(Period, period_id)
-    require_role(period.building_id, "editor")
+    require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
     if request.method == "POST":
@@ -494,7 +543,7 @@ def period_edit(period_id):
             return redirect(url_for("main.period_detail", period_id=period.id))
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
-            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {exc}", "error")
+            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {form_error(exc, PERIOD_EXISTS)}", "error")
     return render_template("period_edit_form.html", period=period)
 
 
@@ -505,12 +554,21 @@ def period_detail(period_id):
     role = require_role(period.building_id)
     if role == "viewer" and period.status != "finalized":
         abort(403)
+    allocation_error = None
+    if period.status == "finalized":
+        report = allocation_report(period)
+    else:
+        try:
+            report = allocation_report(period, compute_allocations(period))
+        except ValueError as exc:
+            report, allocation_error = None, str(exc)
     return render_template(
         "period_detail.html",
         period=period,
         role=role,
         expense_report=expense_report(period),
-        allocation_report=allocation_report(period) if period.status == "finalized" else None,
+        allocation_report=report,
+        allocation_error=allocation_error,
     )
 
 
@@ -550,7 +608,7 @@ def period_receipts_pdf(period_id):
 @login_required
 def expense_add(period_id):
     period = db.get_or_404(Period, period_id)
-    require_role(period.building_id, "editor")
+    require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
     try:
@@ -561,7 +619,7 @@ def expense_add(period_id):
         flash("Η δαπάνη προστέθηκε.", "success")
     except (ValueError, InvalidOperation, IntegrityError) as exc:
         db.session.rollback()
-        flash(f"Δεν προστέθηκε η δαπάνη: {exc}", "error")
+        flash(f"Δεν προστέθηκε η δαπάνη: {form_error(exc, EXPENSE_EXISTS)}", "error")
     return redirect(url_for("main.period_detail", period_id=period.id))
 
 
@@ -593,7 +651,7 @@ def update_expense_from_form(expense, period):
 def expense_edit(expense_id):
     expense = db.get_or_404(Expense, expense_id)
     period = expense.period
-    require_role(period.building_id, "editor")
+    require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
     if request.method == "POST":
@@ -605,7 +663,7 @@ def expense_edit(expense_id):
             return redirect(url_for("main.period_detail", period_id=period.id))
         except (ValueError, InvalidOperation, IntegrityError) as exc:
             db.session.rollback()
-            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {exc}", "error")
+            flash(f"Δεν αποθηκεύτηκαν οι αλλαγές: {form_error(exc, EXPENSE_EXISTS)}", "error")
     return render_template("expense_form.html", expense=expense, period=period)
 
 
@@ -614,7 +672,7 @@ def expense_edit(expense_id):
 def expense_delete(expense_id):
     expense = db.get_or_404(Expense, expense_id)
     period = expense.period
-    require_role(period.building_id, "editor")
+    require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
     db.session.delete(expense)
@@ -628,7 +686,7 @@ def expense_delete(expense_id):
 @login_required
 def period_finalize(period_id):
     period = db.get_or_404(Period, period_id)
-    require_role(period.building_id, "editor")
+    require_role(period.building_id, "admin")
     if period.status != "draft":
         abort(409)
     try:
@@ -646,7 +704,7 @@ def period_finalize(period_id):
 @login_required
 def period_reopen(period_id):
     period = db.get_or_404(Period, period_id)
-    require_role(period.building_id, "building_admin")
+    require_role(period.building_id, "admin")
     if period.status != "finalized":
         abort(409)
     period.allocations.clear()
@@ -692,12 +750,17 @@ def admin_users():
         users=users,
         buildings=buildings,
         memberships_by_user=memberships_by_user,
-        access_labels={
-            "viewer": "Μόνο προβολή",
-            "editor": "Προβολή και αλλαγές",
-            "building_admin": "Πλήρης διαχείριση",
-        },
         generated_link=generated_link,
+    )
+
+
+def other_active_admins(user):
+    return db.session.scalar(
+        db.select(db.func.count(User.id)).where(
+            User.is_system_admin.is_(True),
+            User.is_active_account.is_(True),
+            User.id != user.id,
+        )
     )
 
 
@@ -707,80 +770,46 @@ def admin_users():
 def user_permissions(user_id):
     user = db.get_or_404(User, user_id)
     display_name = request.form.get("display_name", "").strip()
-    email = user.email if user.is_system_admin else normalize_email(request.form.get("email", ""))
+    email = normalize_email(request.form.get("email", ""))
+    is_admin = request.form.get("user_type") == "admin"
+    building_id = request.form.get("building_id", type=int)
+    building = db.session.get(Building, building_id) if building_id else None
+    is_self = user.id == current_user.id
+    if building_id and not building:
+        abort(400)
     if not display_name or "@" not in email:
         flash("Το ονοματεπώνυμο και ένα έγκυρο email είναι υποχρεωτικά.", "error")
-        return redirect(url_for("main.admin_users"))
-    duplicate = db.session.scalar(db.select(User).where(User.email == email, User.id != user.id))
-    if duplicate:
+    elif db.session.scalar(db.select(User).where(User.email == email, User.id != user.id)):
         flash("Το email χρησιμοποιείται ήδη από άλλον χρήστη.", "error")
-        return redirect(url_for("main.admin_users"))
-    user.display_name = display_name
-    user.email = email
-    if not user.is_system_admin:
-        user.can_create_building = request.form.get("can_create_building") == "on"
-        user.is_active_account = request.form.get("is_active") == "on"
-    audit("user_profile_changed", current_user.id, details=user.email)
-    db.session.commit()
-    flash("Τα στοιχεία και τα καθολικά δικαιώματα ενημερώθηκαν.", "success")
-    return redirect(url_for("main.admin_users"))
-
-
-@main.post("/admin/users/<int:user_id>/building-access")
-@login_required
-@system_admin_required
-def user_building_access(user_id):
-    user = db.get_or_404(User, user_id)
-    if user.is_system_admin:
-        abort(400, description="Ο system admin έχει ήδη πρόσβαση σε όλα τα κτίρια.")
-    building_id = request.form.get("building_id", type=int)
-    role = request.form.get("role")
-    building = db.session.get(Building, building_id)
-    if not building or role not in {"viewer", "editor", "building_admin"}:
-        abort(400)
-    membership = db.session.scalar(
-        db.select(BuildingMembership).where(
-            BuildingMembership.user_id == user.id,
-            BuildingMembership.building_id == building.id,
-        )
-    )
-    if membership:
-        membership.role = role
+    elif is_self and not is_admin:
+        flash("Δεν μπορείτε να αφαιρέσετε από τον εαυτό σας τον ρόλο Administrator.", "error")
+    elif (
+        user.is_system_admin
+        and not (is_admin and (is_self or request.form.get("is_active") == "on"))
+        and not other_active_admins(user)
+    ):
+        flash("Πρέπει να υπάρχει πάντα τουλάχιστον ένας ενεργός Administrator.", "error")
     else:
-        db.session.add(BuildingMembership(user_id=user.id, building_id=building.id, role=role))
-    audit(
-        "user_building_access_changed",
-        current_user.id,
-        building.id,
-        f"{user.email}: {role}",
-    )
-    db.session.commit()
-    flash(f"Η πρόσβαση στο «{building.name}» ενημερώθηκε.", "success")
-    return redirect(url_for("main.admin_users"))
-
-
-@main.post("/admin/users/<int:user_id>/building-access/<int:building_id>/delete")
-@login_required
-@system_admin_required
-def user_building_access_delete(user_id, building_id):
-    user = db.get_or_404(User, user_id)
-    building = db.get_or_404(Building, building_id)
-    membership = db.session.scalar(
-        db.select(BuildingMembership).where(
-            BuildingMembership.user_id == user.id,
-            BuildingMembership.building_id == building.id,
+        user.display_name = display_name
+        user.email = email
+        user.is_system_admin = is_admin
+        user.is_active_account = is_self or request.form.get("is_active") == "on"
+        # A simple user sees exactly one building (or none until one is assigned).
+        db.session.execute(
+            db.delete(BuildingMembership).where(BuildingMembership.user_id == user.id)
         )
-    )
-    if membership:
-        db.session.delete(membership)
+        if not is_admin and building:
+            db.session.add(
+                BuildingMembership(user_id=user.id, building_id=building.id, role="viewer")
+            )
         audit(
-            "user_building_access_removed",
+            "user_profile_changed",
             current_user.id,
-            building.id,
-            user.email,
+            building.id if building else None,
+            f"{user.email}: {'admin' if is_admin else 'user'}",
         )
         db.session.commit()
-        flash(f"Η πρόσβαση στο «{building.name}» αφαιρέθηκε.", "success")
+        flash("Τα στοιχεία του χρήστη ενημερώθηκαν.", "success")
     return redirect(url_for("main.admin_users"))
 
 

@@ -64,6 +64,12 @@ def initialize_database():
         )
         db.session.commit()
 
+    if "theme" not in user_columns:
+        db.session.execute(
+            text("ALTER TABLE users ADD COLUMN theme VARCHAR(20) NOT NULL DEFAULT 'light'")
+        )
+        db.session.commit()
+
     building_columns = {column["name"] for column in inspect(db.engine).get_columns("buildings")}
     if "apartment_display_mode" not in building_columns:
         db.session.execute(
@@ -74,10 +80,15 @@ def initialize_database():
         )
         db.session.commit()
 
-    from .data_migrations import drop_period_legacy_id, normalize_legacy_period_ids
+    from .data_migrations import (
+        add_period_numbers,
+        drop_period_legacy_id,
+        normalize_legacy_period_ids,
+    )
 
     normalize_legacy_period_ids()
     drop_period_legacy_id()
+    add_period_numbers()
 
     admin = db.session.scalar(db.select(User).where(User.email == "admin@admin.app"))
     created_admin = admin is None

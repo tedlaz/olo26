@@ -1,5 +1,6 @@
 from collections import defaultdict
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal, InvalidOperation
+from types import SimpleNamespace
 
 from .extensions import db
 from .models import (
@@ -8,8 +9,11 @@ from .models import (
     AuditLog,
     Building,
     BuildingMembership,
+    Expense,
     ExpenseCategory,
+    ManagerTerm,
     Millesimal,
+    Period,
     utcnow,
 )
 
@@ -64,12 +68,10 @@ def create_building_graph(payload, creator_id):
             key = _wizard_text(row, "key")
             apartment_name = _wizard_text(row, "name")
             number = int(row.get("number"))
-            floor = int(row.get("floor", 0))
+            floor = int(row.get("floor") or 0)
             square_meters = Decimal(str(row.get("square_meters", 0)))
             if not key or not apartment_name:
-                raise BuildingWizardError(
-                    "Η ονομασία κάθε διαμερίσματος είναι υποχρεωτική.", 2
-                )
+                raise BuildingWizardError("Η ονομασία κάθε διαμερίσματος είναι υποχρεωτική.", 2)
             if key in apartment_keys or number in apartment_numbers:
                 raise BuildingWizardError(
                     "Οι αριθμοί των διαμερισμάτων πρέπει να είναι μοναδικοί.", 2
@@ -128,24 +130,22 @@ def create_building_graph(payload, creator_id):
         if key in category_keys or normalized_name in category_names:
             raise BuildingWizardError("Οι τύποι δαπανών πρέπει να έχουν μοναδικές ονομασίες.", 3)
         if len(category_name) > 100:
-            raise BuildingWizardError(
-                "Η ονομασία τύπου δαπάνης υπερβαίνει το επιτρεπτό μήκος.", 3
-            )
+            raise BuildingWizardError("Η ονομασία τύπου δαπάνης υπερβαίνει το επιτρεπτό μήκος.", 3)
         category_keys.add(key)
         category_names.add(normalized_name)
         categories.append((key, ExpenseCategory(name=category_name)))
 
     matrix = payload.get("millesimals")
     if not isinstance(matrix, dict):
-        raise BuildingWizardError("Συμπληρώστε τη μήτρα τιμών δαπανών.", 4)
+        raise BuildingWizardError("Συμπληρώστε τα χιλιοστά των τύπων δαπανών.", 3)
     expected_apartment_keys = {key for key, _item in apartments}
     if set(matrix) != category_keys:
-        raise BuildingWizardError("Η μήτρα δεν αντιστοιχεί στους τύπους δαπανών.", 4)
+        raise BuildingWizardError("Τα χιλιοστά δεν αντιστοιχούν στους τύπους δαπανών.", 3)
     raw_values = {}
     for category_key, _category in categories:
         column = matrix.get(category_key)
         if not isinstance(column, dict) or set(column) != expected_apartment_keys:
-            raise BuildingWizardError("Η μήτρα δεν αντιστοιχεί στα διαμερίσματα.", 4)
+            raise BuildingWizardError("Τα χιλιοστά δεν αντιστοιχούν στα διαμερίσματα.", 3)
         for apartment_key, _apartment in apartments:
             raw_values[(apartment_key, category_key)] = column[apartment_key]
 
@@ -176,11 +176,9 @@ def create_building_graph(payload, creator_id):
             values,
         )
     except ValueError as exc:
-        raise BuildingWizardError(str(exc), 4) from exc
+        raise BuildingWizardError(str(exc), 3) from exc
 
-    db.session.add(
-        BuildingMembership(building=building, user_id=creator_id, role="building_admin")
-    )
+    db.session.add(BuildingMembership(building=building, user_id=creator_id, role="building_admin"))
     db.session.add_all(
         Millesimal(apartment_id=apartment_id, category_id=category_id, value=value)
         for (apartment_id, category_id), value in normalized_values.items()
@@ -253,8 +251,33 @@ def allocate_amount(total, shares):
     return {row[0]: Decimal(sign * row[1]) / Decimal(100) for row in rows}
 
 
-def build_allocations(period, reconstructed=False):
-    db.session.query(Allocation).filter_by(period_id=period.id).delete()
+def delete_building(building):
+    """Delete a building and everything that belongs to it.
+
+    Foreign keys are enforced, so children go first. Audit entries are kept
+    (detached from the building) so the history of who did what survives.
+    """
+    building_id = building.id
+    period_ids = db.select(Period.id).where(Period.building_id == building_id)
+    apartment_ids = db.select(Apartment.id).where(Apartment.building_id == building_id)
+    db.session.expunge(building)
+    for statement in (
+        db.delete(Allocation).where(Allocation.period_id.in_(period_ids)),
+        db.delete(Expense).where(Expense.period_id.in_(period_ids)),
+        db.delete(Period).where(Period.building_id == building_id),
+        db.delete(Millesimal).where(Millesimal.apartment_id.in_(apartment_ids)),
+        db.delete(Apartment).where(Apartment.building_id == building_id),
+        db.delete(ExpenseCategory).where(ExpenseCategory.building_id == building_id),
+        db.delete(ManagerTerm).where(ManagerTerm.building_id == building_id),
+        db.delete(BuildingMembership).where(BuildingMembership.building_id == building_id),
+        db.update(AuditLog).where(AuditLog.building_id == building_id).values(building_id=None),
+        db.delete(Building).where(Building.id == building_id),
+    ):
+        db.session.execute(statement, execution_options={"synchronize_session": False})
+
+
+def compute_allocations(period):
+    """Split the period's expenses by the current millesimal matrix, without saving anything."""
     apartments = sorted(period.building.apartments, key=lambda item: (item.number, item.id))
     categories = sorted(period.building.categories, key=lambda item: item.id)
     matrix = {
@@ -273,35 +296,57 @@ def build_allocations(period, reconstructed=False):
     totals = defaultdict(lambda: Decimal("0"))
     for expense in period.expenses:
         totals[expense.category_id] += expense.amount
+    result = []
     for category in categories:
         category_total = totals[category.id]
         shares = [(apartment.id, matrix[(apartment.id, category.id)]) for apartment in apartments]
         amounts = allocate_amount(category_total, shares)
         for apartment in apartments:
-            db.session.add(
-                Allocation(
-                    period=period,
+            result.append(
+                SimpleNamespace(
+                    apartment_id=apartment.id,
+                    category_id=category.id,
                     apartment=apartment,
                     category=category,
-                    apartment_name=apartment.display_label(),
-                    category_name=category.name,
                     millesimals=matrix[(apartment.id, category.id)],
                     category_total=category_total,
                     amount=amounts[apartment.id],
-                    reconstructed=reconstructed,
                 )
             )
+    return result
+
+
+def build_allocations(period, reconstructed=False):
+    db.session.query(Allocation).filter_by(period_id=period.id).delete()
+    for item in compute_allocations(period):
+        db.session.add(
+            Allocation(
+                period=period,
+                apartment=item.apartment,
+                category=item.category,
+                apartment_name=item.apartment.display_label(),
+                category_name=item.category.name,
+                millesimals=item.millesimals,
+                category_total=item.category_total,
+                amount=item.amount,
+                reconstructed=reconstructed,
+            )
+        )
     period.status = "finalized"
     period.finalized_at = utcnow()
 
 
-def allocation_report(period):
-    """Build the apartment/category matrix and its exact financial totals."""
+def allocation_report(period, allocations=None):
+    """Build the apartment/category matrix and its exact financial totals.
+
+    Uses the stored (finalized) allocations unless `allocations` is given,
+    e.g. a draft preview from compute_allocations().
+    """
     amounts = defaultdict(lambda: Decimal("0"))
     millesimals = {}
     apartments = {}
     categories = {}
-    for allocation in period.allocations:
+    for allocation in period.allocations if allocations is None else allocations:
         amounts[(allocation.apartment_id, allocation.category_id)] += allocation.amount
         millesimals[(allocation.apartment_id, allocation.category_id)] = allocation.millesimals
         apartments[allocation.apartment_id] = allocation.apartment

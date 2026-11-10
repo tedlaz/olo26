@@ -4,7 +4,7 @@
 <section class="auth-card">
   <p class="eyebrow">Διαχείριση κτιρίων</p>
   <h1>Σύνδεση</h1>
-  <form method="post" class="stack">
+  <form method="post" class="stack" hx-boost="false">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Email<input type="email" name="email" required autofocus></label>
     <label>Password<input type="password" name="password" required></label>

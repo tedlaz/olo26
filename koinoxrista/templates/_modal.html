@@ -1,0 +1,7 @@
+{# Inline modal: open with <button type="button" data-open="ID">. #}
+{% macro modal(id, title, wide=false) %}
+<dialog id="{{ id }}" class="modal{% if wide %} wide{% endif %}" aria-labelledby="{{ id }}-title">
+  <header class="modal-head"><h2 id="{{ id }}-title">{{ title }}</h2><button type="button" class="modal-close" data-close aria-label="Κλείσιμο">&times;</button></header>
+  {{ caller() }}
+</dialog>
+{% endmacro %}

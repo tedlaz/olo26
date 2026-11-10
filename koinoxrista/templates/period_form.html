@@ -1,3 +1,13 @@
 {% extends "base.html" %}
-{% block content %}<section class="card narrow"><p class="eyebrow">{{ building.name }}</p><h1>Νέα περίοδος</h1>
-<form method="post" class="stack"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Ημερομηνία έκδοσης<input type="date" name="issue_date" required></label><label>Σχόλια<textarea name="comments" rows="4"></textarea></label><button>Άνοιγμα περιόδου</button></form></section>{% endblock %}
+{% block content %}
+<section class="card narrow" data-modal-content>
+  <p class="eyebrow">{{ building.name }}</p>
+  <h1>Νέα περίοδος</h1>
+  <form method="post" action="{{ request.path }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Ημερομηνία έκδοσης<input type="date" name="issue_date" value="{{ request.form.get('issue_date') or suggested_date.isoformat() }}" required></label>
+    <label>Σχόλια<textarea name="comments" rows="4">{{ request.form.get('comments', '') }}</textarea></label>
+    <button>Άνοιγμα περιόδου</button>
+  </form>
+</section>
+{% endblock %}

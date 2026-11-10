@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Διόρθωση διαμερίσματος{% endblock %}
 {% block content %}
-<section class="card narrow">
+<section class="card narrow" data-modal-content>
   <p class="eyebrow">{{ apartment.building.name }}</p>
   <h1>Διόρθωση διαμερίσματος</h1>
-  <form method="post" class="stack">
+  <form method="post" action="{{ request.path }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Αριθμός<input type="number" name="number" value="{{ apartment.number }}" required></label>
     <label>Ονομασία<input name="name" value="{{ apartment.name }}" required></label>

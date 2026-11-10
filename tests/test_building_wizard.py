@@ -62,9 +62,7 @@ def wizard_payload():
 def test_building_wizard_creates_complete_graph_atomically(app, client):
     login_admin(app, client)
 
-    response = client.post(
-        "/buildings/new", data={"wizard_payload": json.dumps(wizard_payload())}
-    )
+    response = client.post("/buildings/new", data={"wizard_payload": json.dumps(wizard_payload())})
 
     assert response.status_code == 302
     with app.app_context():
@@ -102,7 +100,7 @@ def test_building_wizard_rolls_back_and_preserves_payload_on_late_error(app, cli
     )
 
     assert response.status_code == 200
-    assert 'data-initial-step="4"' in response.text
+    assert 'data-initial-step="3"' in response.text
     assert "έχει 900 αντί για 1000 χιλιοστά" in response.text
     serialized_payload = re.search(
         r'<script type="application/json" data-wizard-initial>(.*?)</script>', response.text
@@ -118,3 +116,73 @@ def test_building_wizard_rolls_back_and_preserves_payload_on_late_error(app, cli
             AuditLog,
         ):
             assert db.session.scalar(db.select(db.func.count(model.id))) == 0
+
+
+def test_wizard_accepts_empty_floor_as_ground_floor(app, client):
+    login_admin(app, client)
+    payload = wizard_payload()
+    payload["apartments"][0]["floor"] = ""
+
+    response = client.post("/buildings/new", data={"wizard_payload": json.dumps(payload)})
+
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.scalar(db.select(Apartment.floor).where(Apartment.name == "Α1")) == 0
+
+
+def test_wizard_script_is_loaded_once_from_base_layout(app, client):
+    login_admin(app, client)
+    page = client.get("/buildings/new").text
+    assert page.count("building_wizard.js") == 1
+    assert "building_wizard.js" in client.get("/").text
+
+
+def test_millesimal_matrix_footer_shows_total_and_remainder(app, client):
+    login_admin(app, client)
+    client.post("/buildings/new", data={"wizard_payload": json.dumps(wizard_payload())})
+    with app.app_context():
+        building = db.session.scalar(db.select(Building))
+        apartment = db.session.scalar(db.select(Apartment).where(Apartment.name == "Α1"))
+        heating = db.session.scalar(
+            db.select(ExpenseCategory).where(ExpenseCategory.name == "Θέρμανση")
+        )
+        url = f"/buildings/{building.id}/millesimals"
+        field = f"m_{apartment.id}_{heating.id}"
+
+    page = client.get(url).text
+    assert page.count("✓ σωστό") == 2
+
+    # a rejected save re-renders the typed values: 450 + 400 → 850, 150 left
+    form = {key: value for key, value in re.findall(r'name="(m_\d+_\d+)"[^>]*value="(\d+)"', page)}
+    form[field] = "450"
+    page = client.post(url, data=form).text
+    assert "<strong>850</strong><small>Υπόλοιπο 150</small>" in page
+
+
+def test_form_errors_never_show_database_or_parser_internals(app, client):
+    from decimal import InvalidOperation
+
+    from sqlalchemy.exc import IntegrityError
+
+    from koinoxrista.main import form_error
+
+    assert form_error(IntegrityError("stmt", {}, Exception("UNIQUE")), "διπλό") == "διπλό"
+    assert form_error(ValueError("invalid literal for int() with base 10: 'x'"), "-") == (
+        "Κάποιο αριθμητικό πεδίο δεν είναι έγκυρο."
+    )
+    assert form_error(InvalidOperation(), "-") == "Κάποιο αριθμητικό πεδίο δεν είναι έγκυρο."
+    assert form_error(ValueError("Η ονομασία είναι υποχρεωτική."), "-") == (
+        "Η ονομασία είναι υποχρεωτική."
+    )
+
+    login_admin(app, client)
+    client.post("/buildings/new", data={"wizard_payload": json.dumps(wizard_payload())})
+    with app.app_context():
+        apartment = db.session.scalar(db.select(Apartment).where(Apartment.name == "Α2"))
+        apartment_id = apartment.id
+    page = client.post(
+        f"/apartments/{apartment_id}/edit",
+        data={"name": "Α2", "number": "1", "floor": "0", "square_meters": "70"},
+    ).text
+    assert "Υπάρχει ήδη διαμέρισμα με αυτόν τον αριθμό." in page
+    assert "IntegrityError" not in page

@@ -6,24 +6,23 @@ from flask_login import current_user
 from .extensions import db
 from .models import BuildingMembership
 
-ROLE_LEVEL = {"viewer": 1, "editor": 2, "building_admin": 3}
-
 
 def membership_for(building_id):
+    """'admin' for administrators, 'viewer' for users with access to the building, else None."""
     if current_user.is_system_admin:
-        return "building_admin"
+        return "admin"
     membership = db.session.scalar(
         db.select(BuildingMembership).where(
             BuildingMembership.building_id == building_id,
             BuildingMembership.user_id == current_user.id,
         )
     )
-    return membership.role if membership else None
+    return "viewer" if membership else None
 
 
 def require_role(building_id, minimum="viewer"):
     role = membership_for(building_id)
-    if role is None or ROLE_LEVEL[role] < ROLE_LEVEL[minimum]:
+    if role is None or (minimum == "admin" and role != "admin"):
         abort(403)
     return role
 

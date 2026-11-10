@@ -48,7 +48,7 @@ def test_period_expenses_show_distinct_create_panel_and_edit_action(app, client)
     assert response.status_code == 200
     assert "Νέα δαπάνη" in response.text
     assert "Ημερομηνία παραστατικού" in response.text
-    assert f'/expenses/{expense_id}/edit' in response.text
+    assert f"/expenses/{expense_id}/edit" in response.text
     assert "Διόρθωση" in response.text
     assert 'class="expense-action-badge danger"' in response.text
     assert 'data-confirm="Να διαγραφεί οριστικά αυτή η δαπάνη;"' in response.text
@@ -133,3 +133,51 @@ def test_finalized_expense_cannot_be_edited(app, client):
 
     assert get_response.status_code == 409
     assert post_response.status_code == 409
+
+
+def test_draft_period_shows_provisional_allocation_without_saving_it(app, client):
+    from koinoxrista.models import Allocation, Apartment, Millesimal
+
+    period_id, _, category_id = create_expense(app)
+    login(client)
+
+    # incomplete matrix: the page explains why there is no allocation yet
+    response = client.get(f"/periods/{period_id}")
+    assert "Κατανομή ανά διαμέρισμα" in response.text
+    assert "Δεν μπορεί να υπολογιστεί η κατανομή" in response.text
+
+    with app.app_context():
+        category = db.session.get(ExpenseCategory, category_id)
+        for number, value in ((1, 600), (2, 400)):
+            apartment = Apartment(
+                building_id=category.building_id, name=f"Δ{number}", number=number
+            )
+            db.session.add(Millesimal(apartment=apartment, category=category, value=value))
+        db.session.commit()
+
+    response = client.get(f"/periods/{period_id}")
+    assert "Πρόχειρη · με τα τρέχοντα χιλιοστά" in response.text
+    assert "6.00 €" in response.text and "4.00 €" in response.text
+    assert "600‰</small>" in response.text and "400‰</small>" in response.text
+    with app.app_context():
+        assert db.session.scalar(db.select(db.func.count(Allocation.id))) == 0
+
+
+def test_dashboard_card_shows_latest_finalized_and_drafts(app, client):
+    period_id, _, _ = create_expense(app)
+    with app.app_context():
+        draft = db.session.get(Period, period_id)
+        db.session.add(
+            Period(
+                building_id=draft.building_id,
+                issue_date=date(2026, 7, 1),
+                manager_name_snapshot="Δ",
+                status="finalized",
+            )
+        )
+        db.session.commit()
+    login(client)
+
+    page = client.get("/").text
+    assert "Τελευταία οριστική" in page and "01/07/2026" in page
+    assert "Πρόχειρες" in page and "01/08/2026 · 10.00 €" in page

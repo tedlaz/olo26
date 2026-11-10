@@ -17,7 +17,7 @@ def money(value):
 def period_reference(period):
     issue_date = period.issue_date
     label = period.comments.strip() or "Χωρίς περιγραφή"
-    number = period.id
+    number = period.number
     return f"Περίοδος: {label} {issue_date.day}/{issue_date.month}/{issue_date.year} (No: {number})"
 
 
@@ -245,7 +245,7 @@ def create_receipts_report(period):
         )
         pdf.ln(5)
         pdf.set_font("App", size=11)
-        receipt_number = period.id
+        receipt_number = period.number
         pdf.cell(
             0,
             8,

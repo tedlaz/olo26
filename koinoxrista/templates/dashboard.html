@@ -4,7 +4,7 @@
   <div><p class="eyebrow">Χαρτοφυλάκιο</p><h1>Κτίρια</h1></div>
   <div class="actions">
     {% if current_user.is_system_admin and not buildings %}<a class="button secondary" href="{{ url_for('main.initial_setup') }}">Εισαγωγή αρχικής βάσης</a>{% endif %}
-    {% if current_user.is_system_admin or current_user.can_create_building %}<a class="button" href="{{ url_for('main.building_create') }}">Νέο κτίριο</a>{% endif %}
+    {% if current_user.is_system_admin %}<a class="button" href="{{ url_for('main.building_create') }}">Νέο κτίριο</a>{% endif %}
   </div>
 </div>
 <div class="building-grid">
@@ -12,6 +12,12 @@
     <a class="building-card" href="{{ url_for('main.building_detail', building_id=building.id) }}">
       <span class="building-number">{{ '%02d'|format(loop.index) }}</span>
       <h2>{{ building.name }}</h2><p>{{ building.address }} · {{ building.postal_code }}</p>
+      {% set finalized = building.periods|selectattr('status', 'equalto', 'finalized')|sort(attribute='issue_date', reverse=true)|list %}
+      {% set drafts = building.periods|selectattr('status', 'equalto', 'draft')|sort(attribute='issue_date', reverse=true)|list %}
+      <dl class="card-periods">
+        <div><dt>Τελευταία οριστική</dt><dd>{% if finalized %}{{ finalized[0].issue_date.strftime('%d/%m/%Y') }} · {{ '%.2f'|format(finalized[0].total) }} €{% else %}—{% endif %}</dd></div>
+        {% if current_user.is_system_admin %}<div><dt>Πρόχειρες</dt><dd>{% for period in drafts[:3] %}{{ period.issue_date.strftime('%d/%m/%Y') }} · {{ '%.2f'|format(period.total) }} €{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}{% if drafts|length > 3 %}<br>+{{ drafts|length - 3 }} ακόμη{% endif %}</dd></div>{% endif %}
+      </dl>
       <strong>{{ building.periods|length }} περίοδοι</strong>
     </a>
   {% else %}<div class="empty">Δεν υπάρχει ακόμη διαθέσιμο κτίριο.</div>{% endfor %}

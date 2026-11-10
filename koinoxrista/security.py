@@ -19,4 +19,4 @@ def hash_token(raw):
 
 
 def valid_password(password):
-    return len(password) >= 8
+    return len(password) >= 2

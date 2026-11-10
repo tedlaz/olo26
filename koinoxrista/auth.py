@@ -8,6 +8,33 @@ from .security import hash_token, normalize_email, valid_password
 auth = Blueprint("auth", __name__, url_prefix="/auth")
 
 
+# Value -> label. Each value has a matching [data-theme] block in style.css.
+THEMES = {
+    "light": "Φωτεινό",
+    "sea": "Θάλασσα",
+    "sand": "Άμμος",
+    "dark": "Σκοτεινό",
+    "midnight": "Μεσάνυχτα",
+    "forest": "Δάσος",
+}
+
+
+@auth.app_context_processor
+def theme_context():
+    theme = current_user.theme if current_user.is_authenticated else "light"
+    return {"themes": THEMES, "current_theme": theme if theme in THEMES else "light"}
+
+
+@auth.post("/theme")
+@login_required
+def set_theme():
+    theme = request.form.get("theme")
+    if theme in THEMES:
+        current_user.theme = theme
+        db.session.commit()
+    return redirect(request.referrer or url_for("main.dashboard"))
+
+
 @auth.before_app_request
 def require_changed_password():
     if not current_user.is_authenticated or not current_user.must_change_password:
@@ -53,7 +80,7 @@ def change_password():
         if not current_user.check_password(current):
             flash("Ο τρέχων κωδικός δεν είναι σωστός.", "error")
         elif not valid_password(password):
-            flash("Ο νέος κωδικός πρέπει να έχει τουλάχιστον 10 χαρακτήρες.", "error")
+            flash("Ο νέος κωδικός πρέπει να έχει τουλάχιστον 2 χαρακτήρες.", "error")
         elif password != request.form.get("confirm_password"):
             flash("Η επιβεβαίωση του κωδικού δεν συμφωνεί.", "error")
         else:
@@ -88,7 +115,7 @@ def register(token):
         elif not display_name:
             flash("Το ονοματεπώνυμο είναι υποχρεωτικό.", "error")
         elif not valid_password(password):
-            flash("Το password πρέπει να έχει τουλάχιστον 10 χαρακτήρες.", "error")
+            flash("Το password πρέπει να έχει τουλάχιστον 2 χαρακτήρες.", "error")
         elif password != request.form.get("confirm_password"):
             flash("Η επιβεβαίωση του password δεν συμφωνεί.", "error")
         else:
@@ -112,7 +139,7 @@ def reset_password(token):
     if request.method == "POST":
         password = request.form.get("password", "")
         if not valid_password(password):
-            flash("Το password πρέπει να έχει τουλάχιστον 10 χαρακτήρες.", "error")
+            flash("Το password πρέπει να έχει τουλάχιστον 2 χαρακτήρες.", "error")
         elif password != request.form.get("confirm_password"):
             flash("Η επιβεβαίωση του password δεν συμφωνεί.", "error")
         else:

@@ -472,7 +472,7 @@ h3 {
 }
 
 .back-navigation {
-  margin: -16px 0 28px;
+  margin: -16px 0 14px;
 }
 
 .back-navigation a {
@@ -483,7 +483,7 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--teal-dark);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
   font-size: 0.82rem;
   font-weight: 600;
@@ -522,7 +522,7 @@ h3 {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--surface);
   box-shadow: var(--shadow-md);
 }
 
@@ -668,8 +668,7 @@ h3 {
   display: none;
 }
 
-.wizard-fields,
-.apartment-wizard-fields {
+.wizard-fields {
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -680,9 +679,7 @@ h3 {
 }
 
 .wizard-section-head,
-.wizard-list-item header,
-.wizard-footer,
-.category-item {
+.wizard-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -695,25 +692,6 @@ h3 {
   margin-top: 22px;
 }
 
-.wizard-list-item {
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-soft);
-}
-
-.wizard-list-item header {
-  margin-bottom: 14px;
-}
-
-.apartment-wizard-fields {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.category-item label {
-  width: min(620px, 100%);
-}
-
 .wizard-error {
   margin-bottom: 22px;
   padding: 12px 14px;
@@ -722,38 +700,6 @@ h3 {
   color: var(--danger);
   background: var(--danger-soft);
   font-weight: 700;
-}
-
-.wizard-matrix-wrap {
-  margin-top: 22px;
-}
-
-.wizard-matrix th:first-child {
-  min-width: 180px;
-}
-
-.wizard-matrix tbody th small {
-  display: block;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.wizard-matrix tfoot td,
-.wizard-matrix tfoot th {
-  padding: 12px;
-  border-top: 2px solid var(--line-strong);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.wizard-matrix .is-valid {
-  color: var(--success);
-  background: var(--primary-soft);
-}
-
-.wizard-matrix .is-invalid {
-  color: var(--danger);
-  background: var(--danger-soft);
 }
 
 .wizard-footer {
@@ -786,7 +732,7 @@ textarea {
   border-radius: var(--radius-sm);
   outline: 0;
   color: var(--ink-strong);
-  background: #fff;
+  background: var(--surface);
   box-shadow: inset 0 1px 2px rgba(15, 17, 21, 0.03);
   transition: border-color var(--dur-fast) var(--ease-std),
     box-shadow var(--dur-base) var(--ease-out), background-color var(--dur-fast) var(--ease-std),
@@ -947,7 +893,7 @@ input[type="checkbox"] {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
@@ -997,7 +943,7 @@ input[type="checkbox"] {
   gap: 18px;
 }
 
-.section-head > a {
+.section-head > a:not(.button) {
   padding: 6px 10px;
   border-radius: 999px;
   background: var(--teal-soft);
@@ -1152,7 +1098,7 @@ details.card[open] .compact-form {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
   scrollbar-color: var(--line-strong) transparent;
 }
 
@@ -1216,7 +1162,7 @@ tfoot td {
   left: 0;
   z-index: 1;
   color: var(--ink-strong);
-  background: #fff;
+  background: var(--surface);
 }
 
 .form-footer {
@@ -1267,7 +1213,7 @@ tfoot td {
   border: 1px solid var(--line);
   border-radius: 10px;
   color: var(--ink);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
   animation: flash-in 340ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -1326,7 +1272,7 @@ tfoot td {
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-md);
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--surface);
   text-align: center;
 }
 
@@ -1359,7 +1305,7 @@ tfoot td {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--teal-dark);
-  background: #fff;
+  background: var(--surface);
   font-size: 0.83rem;
   font-weight: 700;
 }
@@ -1391,6 +1337,10 @@ tfoot td {
 .allocation-table .total-column {
   border-left: 2px solid var(--line-strong);
   background: var(--row-total);
+}
+
+.allocation-table thead .total-column {
+  background: var(--navy);
 }
 
 .allocation-table tfoot th {
@@ -1719,7 +1669,7 @@ tfoot td {
   display: grid;
   gap: 5px;
   padding: 17px;
-  background: rgba(255, 255, 255, 0.93);
+  background: var(--surface);
 }
 
 .access-legend div:nth-child(1) {
@@ -1754,7 +1704,7 @@ tfoot td {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
@@ -2053,8 +2003,7 @@ tfoot td {
     top: 16px;
   }
 
-  .wizard-fields,
-  .apartment-wizard-fields {
+  .wizard-fields {
     grid-template-columns: 1fr;
   }
 
@@ -2063,8 +2012,7 @@ tfoot td {
   }
 
   .wizard-section-head,
-  .wizard-footer,
-  .category-item {
+  .wizard-footer {
     align-items: stretch;
     flex-direction: column;
   }
@@ -2304,17 +2252,6 @@ tfoot td {
   animation: fade-slide-up var(--dur-base) var(--ease-out) both;
 }
 
-.wizard-list-item {
-  animation: scale-in var(--dur-base) var(--ease-out) both;
-}
-
-/* validity feedback in the wizard matrix */
-.wizard-matrix .is-valid,
-.wizard-matrix .is-invalid {
-  transition: background-color var(--dur-base) var(--ease-std),
-    color var(--dur-base) var(--ease-std);
-}
-
 /* HTMX in-flight feedback — purely visual, does not alter htmx behaviour */
 .htmx-request {
   cursor: progress;
@@ -2369,4 +2306,671 @@ button.htmx-request {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Modal forms */
+dialog.modal {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+
+dialog.modal.wide {
+  width: auto;
+  min-width: min(560px, calc(100vw - 32px));
+  max-width: min(1100px, calc(100vw - 32px));
+}
+
+dialog.modal::backdrop {
+  background: rgba(15, 17, 21, 0.55);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.modal-head h2 {
+  margin: 0;
+}
+
+button.modal-close {
+  padding: 2px 10px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+button.modal-close::after {
+  display: none;
+}
+
+#modal [data-modal-content] {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Forms in modals: short fields share a row; long ones take the full row. */
+dialog.modal {
+  width: min(680px, calc(100vw - 32px));
+}
+
+dialog.modal .stack {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px 16px;
+}
+
+dialog.modal .stack > .wide,
+dialog.modal .stack > label:has(textarea),
+dialog.modal .stack > .permission-check,
+dialog.modal .stack > h2,
+dialog.modal .stack > p,
+dialog.modal .stack > button {
+  grid-column: 1 / -1;
+}
+
+dialog.modal .stack > button {
+  justify-self: end;
+}
+
+dialog.modal.wide {
+  min-width: min(680px, calc(100vw - 32px));
+}
+
+dialog.modal .stack > .span-2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 520px) {
+  dialog.modal .stack > .span-2 {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Building tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab.active {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+}
+
+.tab-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--ink);
+  font-size: 0.75rem;
+}
+
+/* ==========================================================================
+   Themes — chosen per user (users.theme → <html data-theme>).
+   "light" is the :root palette above; the others override the tokens.
+   ========================================================================== */
+:root {
+  color-scheme: light;
+}
+
+[data-theme="sea"] {
+  --ink: #12303a;
+  --ink-strong: #0b2029;
+  --muted: #5b7480;
+  --canvas: #f1f8f9;
+  --surface-soft: #f5fbfc;
+  --line: #d6e7ea;
+  --line-strong: #b6d3d8;
+  --primary: #0e7490;
+  --primary-dark: #0c6178;
+  --primary-darker: #0a4f62;
+  --primary-soft: #e3f5f8;
+  --primary-line: #a5dbe6;
+  --row-zebra: #f6fbfc;
+  --row-hover: #e9f4f6;
+  --row-total: #edf6f8;
+  --shadow-accent: 0 4px 14px rgba(14, 116, 144, 0.22);
+  --ring: 0 0 0 3px rgba(14, 116, 144, 0.18);
+}
+
+[data-theme="sand"] {
+  --ink: #2f241a;
+  --ink-strong: #1f170f;
+  --muted: #7c6a58;
+  --canvas: #faf6ef;
+  --surface: #fffdf9;
+  --surface-soft: #fcf8f1;
+  --line: #ebe1d2;
+  --line-strong: #d9c9b2;
+  --primary: #b45309;
+  --primary-dark: #9a4708;
+  --primary-darker: #7c3a07;
+  --primary-soft: #fdf1e2;
+  --primary-line: #f3cf9f;
+  --row-zebra: #fcf9f3;
+  --row-hover: #f6efe3;
+  --row-total: #f7f1e7;
+  --shadow-accent: 0 4px 14px rgba(180, 83, 9, 0.22);
+  --ring: 0 0 0 3px rgba(180, 83, 9, 0.18);
+}
+
+[data-theme="dark"],
+[data-theme="midnight"],
+[data-theme="forest"] {
+  color-scheme: dark;
+  --ink: #e6e8eb;
+  --ink-strong: #f5f6f8;
+  --muted: #9ba3af;
+  --muted-soft: #6b7280;
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.1);
+  --success-line: rgba(74, 222, 128, 0.3);
+  --success-ink: #bbf7d0;
+  --danger: #f87171;
+  --danger-dark: #ef4444;
+  --danger-soft: rgba(248, 113, 113, 0.1);
+  --danger-line: rgba(248, 113, 113, 0.32);
+  --danger-ink: #fecaca;
+  --warn: #facc15;
+  --warn-soft: rgba(250, 204, 21, 0.1);
+  --warn-line: rgba(250, 204, 21, 0.3);
+  --warn-ink: #fef08a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45), 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] {
+  --canvas: #121417;
+  --surface: #1b1e23;
+  --surface-soft: #202329;
+  --line: #2c3037;
+  --line-strong: #3b4048;
+  --primary: #818cf8;
+  --primary-dark: #6366f1;
+  --primary-darker: #4f46e5;
+  --primary-soft: rgba(129, 140, 248, 0.12);
+  --primary-line: rgba(129, 140, 248, 0.38);
+  --row-zebra: #1e2126;
+  --row-hover: #252930;
+  --row-total: #22262c;
+  --shadow-accent: 0 4px 14px rgba(99, 102, 241, 0.3);
+  --ring: 0 0 0 3px rgba(129, 140, 248, 0.28);
+}
+
+[data-theme="midnight"] {
+  --ink: #dde6f5;
+  --muted: #8fa0bb;
+  --canvas: #0b1220;
+  --surface: #121b2e;
+  --surface-soft: #16213a;
+  --line: #22304b;
+  --line-strong: #31415f;
+  --primary: #60a5fa;
+  --primary-dark: #3b82f6;
+  --primary-darker: #2563eb;
+  --primary-soft: rgba(96, 165, 250, 0.12);
+  --primary-line: rgba(96, 165, 250, 0.38);
+  --row-zebra: #141e33;
+  --row-hover: #1a2640;
+  --row-total: #172239;
+  --shadow-accent: 0 4px 14px rgba(59, 130, 246, 0.3);
+  --ring: 0 0 0 3px rgba(96, 165, 250, 0.28);
+}
+
+[data-theme="forest"] {
+  --ink: #e1ece4;
+  --muted: #93a99a;
+  --canvas: #0e1511;
+  --surface: #151f19;
+  --surface-soft: #19251e;
+  --line: #24342a;
+  --line-strong: #33473a;
+  --primary: #4ade80;
+  --primary-dark: #22c55e;
+  --primary-darker: #16a34a;
+  --primary-soft: rgba(74, 222, 128, 0.12);
+  --primary-line: rgba(74, 222, 128, 0.36);
+  --row-zebra: #17221b;
+  --row-hover: #1d2b22;
+  --row-total: #1a271f;
+  --shadow-accent: 0 4px 14px rgba(34, 197, 94, 0.3);
+  --ring: 0 0 0 3px rgba(74, 222, 128, 0.26);
+}
+
+/* Bright accents need dark text on filled buttons in dark themes. */
+[data-theme="dark"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="dark"] .button:not(.secondary),
+[data-theme="midnight"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="midnight"] .button:not(.secondary),
+[data-theme="forest"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="forest"] .button:not(.secondary) {
+  color: #0b0d10;
+}
+
+.theme-form select {
+  width: auto;
+  min-height: 0;
+  height: 32px;
+  box-shadow: none;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+}
+
+.theme-form option {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Building cards: latest periods */
+.card-periods {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.card-periods div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-periods dt {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.78rem;
+}
+
+.card-periods dd {
+  margin: 0;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* User modal: an Administrator sees every building, so the building field is irrelevant. */
+form:has(select[name="user_type"] option[value="admin"]:checked) .user-building {
+  display: none;
+}
+
+/* Period page: compact header (title, status and details on two short lines) */
+.period-head {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.period-head .eyebrow {
+  margin-bottom: 2px;
+}
+
+.period-head h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.period-head h1 .status {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.period-meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.period-meta strong {
+  color: var(--ink);
+}
+
+/* Date picker (flatpickr) in the app's colours — follows the selected theme */
+.flatpickr-wrapper {
+  display: block;
+}
+
+.flatpickr-calendar {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.flatpickr-calendar.arrowTop::after,
+.flatpickr-calendar.arrowTop::before {
+  border-bottom-color: var(--surface);
+}
+
+.flatpickr-calendar.arrowBottom::after,
+.flatpickr-calendar.arrowBottom::before {
+  border-top-color: var(--surface);
+}
+
+.flatpickr-months .flatpickr-month,
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year,
+span.flatpickr-weekday,
+.flatpickr-day {
+  color: var(--ink);
+  fill: var(--ink);
+  background: transparent;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months option {
+  background: var(--surface);
+}
+
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  color: var(--ink);
+  fill: var(--ink);
+}
+
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay,
+.flatpickr-day.flatpickr-disabled {
+  color: var(--muted-soft);
+}
+
+.flatpickr-day:hover,
+.flatpickr-day:focus {
+  border-color: var(--row-hover);
+  background: var(--row-hover);
+}
+
+.flatpickr-day.today {
+  border-color: var(--primary-line);
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+  border-color: var(--primary);
+  color: #fff;
+  background: var(--primary);
+}
+
+/* flatpickr's own input: same look as every other field */
+input.flatpickr-input[readonly] {
+  cursor: pointer;
+}
+
+/* the open calendar may extend past the modal's edge instead of being clipped */
+dialog.modal:has(.flatpickr-calendar.open) {
+  overflow: visible;
+}
+
+/* month dropdown and year field inside the calendar: undo the app-wide field styling */
+.flatpickr-calendar select,
+.flatpickr-calendar input {
+  width: auto;
+  min-height: 0;
+  padding: 0 2px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  transform: none;
+}
+
+.flatpickr-current-month .numInputWrapper {
+  width: 6ch;
+}
+
+.flatpickr-current-month {
+  font-size: 1rem;
+}
+
+/* a form page shown inside #modal: no card clipping/decoration (it would cut the date picker) */
+#modal [data-modal-content] {
+  overflow: visible;
+}
+
+#modal [data-modal-content]::before {
+  display: none;
+}
+
+.flatpickr-calendar.static.open-above {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
+
+.flatpickr-calendar.static.open-above::before,
+.flatpickr-calendar.static.open-above::after {
+  display: none;
+}
+
+/* Elements with the hidden attribute stay hidden even when a rule sets display
+   (e.g. buttons are inline-flex) */
+[hidden] {
+  display: none !important;
+}
+
+
+
+/* Wizard step 4: summary */
+.wizard-summary {
+  display: grid;
+  gap: 26px;
+  margin-top: 18px;
+}
+
+.summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.summary-head h3 {
+  margin: 0;
+}
+
+.summary-building {
+  display: grid;
+  gap: 10px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0;
+}
+
+.summary-building dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.summary-building dd {
+  margin: 2px 0 0;
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.summary-matrix tfoot .is-valid {
+  color: var(--success);
+}
+
+.summary-matrix tfoot .is-invalid {
+  color: var(--danger);
+}
+
+/* Millesimal matrix footer: current total and what is left up to 1000 */
+.matrix-total {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.matrix-total strong,
+.matrix-total small {
+  display: block;
+}
+
+.matrix-total small {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.matrix-total.is-valid {
+  color: var(--success);
+}
+
+.matrix-total.is-invalid {
+  color: var(--danger);
+}
+
+/* Wizard steps 2-3: compact editable tables, one line per apartment */
+.wizard-grid {
+  margin-top: 14px;
+}
+
+.wizard-grid th,
+.wizard-grid td {
+  padding: 3px 4px;
+  vertical-align: middle;
+}
+
+.wizard-grid thead th {
+  padding: 8px 6px;
+}
+
+.wizard-grid input {
+  min-width: 7rem;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 0.88rem;
+}
+
+.wizard-grid .narrow input {
+  width: 5.5rem;
+  min-width: 0;
+}
+
+.wizard-grid .row-action {
+  width: 32px;
+  text-align: center;
+}
+
+button.row-remove {
+  min-height: 0;
+  padding: 2px 8px;
+  border: 0;
+  color: var(--muted);
+  background: none;
+  box-shadow: none;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+button.row-remove::after {
+  display: none;
+}
+
+button.row-remove:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+  transform: none;
+}
+
+.category-matrix tbody th {
+  min-width: 10rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.category-matrix td input {
+  width: 100%;
+  min-width: 6rem;
+  text-align: right;
+}
+
+.category-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.category-head input {
+  min-width: 8rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+}
+
+.category-head button.row-remove {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.category-matrix tfoot td {
+  text-align: right;
+}
+
+/* Allocation table: millesimals as a small tinted badge just before the amount */
+.alloc-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.allocation-table small.millesimals {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.5;
 }
