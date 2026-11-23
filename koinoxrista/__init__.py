@@ -125,6 +125,10 @@ def create_app(test_config=None):
             "DATABASE_URL", f"sqlite:///{Path(app.instance_path) / 'koinoxrista_app.db'}"
         ),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        # Unique names: cookies are shared across ports on the same host, so another
+        # Flask app's "session" cookie would overwrite ours and break CSRF.
+        SESSION_COOKIE_NAME="koinoxrista_session",
+        REMEMBER_COOKIE_NAME="koinoxrista_remember",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=environment_flag("COOKIE_SECURE"),
