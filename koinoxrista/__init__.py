@@ -146,6 +146,18 @@ def create_app(test_config=None):
 
     db.init_app(app)
     csrf.init_app(app)
+
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def csrf_error(exc):
+        app.logger.warning("CSRF rejected %s %s: %s", request.method, request.path, exc.description)
+        if request.accept_mimetypes.best == "application/json":
+            from flask import jsonify
+
+            return jsonify(error=f"Έλεγχος ασφαλείας (CSRF) απέτυχε: {exc.description}"), 400
+        return exc
+
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Χρειάζεται να συνδεθείτε."
