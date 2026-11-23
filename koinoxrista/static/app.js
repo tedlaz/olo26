@@ -225,8 +225,11 @@
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-      const result = await prepareResponse.json();
-      if (!prepareResponse.ok) throw new Error(result.error || "Η δημιουργία backup απέτυχε.");
+      const isJson = (prepareResponse.headers.get("Content-Type") || "").includes("application/json");
+      const result = isJson ? await prepareResponse.json() : {};
+      if (!prepareResponse.ok || !isJson) {
+        throw new Error(result.error || `Η δημιουργία backup απέτυχε (HTTP ${prepareResponse.status}). Ανανεώστε τη σελίδα και δοκιμάστε ξανά.`);
+      }
 
       const historyResponse = await fetch(form.dataset.historyUrl, {
         credentials: "same-origin",

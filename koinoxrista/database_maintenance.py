@@ -103,7 +103,10 @@ def create_backup(prefix="manual"):
         if not source_path.is_file():
             raise DatabaseMaintenanceError("Δεν βρέθηκε η ενεργή βάση δεδομένων.")
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-        destination = backup_directory() / f"koinoxrista-{prefix}-{timestamp}.db"
+        try:
+            destination = backup_directory() / f"koinoxrista-{prefix}-{timestamp}.db"
+        except OSError as exc:
+            raise DatabaseMaintenanceError(f"Αποτυχία δημιουργίας φακέλου backup: {exc}") from exc
         try:
             with (
                 closing(_readonly_connection(source_path)) as source,
