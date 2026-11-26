@@ -114,8 +114,32 @@
     { passive: true },
   );
 
+  // On phones tables render as cards (CSS): tag each cell with its column header.
+  function cardTables(root) {
+    root.querySelectorAll("table:not(.matrix)").forEach(function (table) {
+      const heads = [];
+      // two-column summary tables (no header) stay tables
+      if (!table.querySelector("thead th")) return;
+      table.querySelectorAll("thead th").forEach(function (th) {
+        for (let i = 0; i < th.colSpan; i++) heads.push(th.textContent.trim());
+      });
+      table.classList.add("cards");
+      table.querySelectorAll("tbody tr, tfoot tr").forEach(function (tr) {
+        let col = 0;
+        for (const cell of tr.cells) {
+          // a footer row's first cell is its own title ("Σύνολο")
+          const title = col === 0 && tr.parentElement.tagName === "TFOOT";
+          if (heads[col] && cell.colSpan === 1 && !title) cell.dataset.label = heads[col];
+          if (!cell.textContent.trim() && !cell.querySelector("input, select, button, a, svg")) cell.dataset.empty = "";
+          col += cell.colSpan;
+        }
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     greekDates(document);
+    cardTables(document);
     trackScreen();
   });
   // boosted navigation swaps <body>; Back/Forward restores a snapshot
@@ -124,6 +148,7 @@
   });
   document.addEventListener("htmx:load", function (event) {
     greekDates(event.detail.elt);
+    cardTables(event.detail.elt);
   });
   // htmx snapshots the page for Back/Forward: store plain inputs, re-enhance on restore.
   document.addEventListener("htmx:beforeHistorySave", function () {
@@ -166,6 +191,7 @@
     dialog.querySelector(".modal-body").replaceChildren(...doc.querySelectorAll(".flash"), content);
     if (window.htmx) window.htmx.process(dialog);
     greekDates(dialog);
+    cardTables(dialog);
     if (!dialog.open) dialog.showModal();
     return true;
   }

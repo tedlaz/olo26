@@ -37,7 +37,7 @@
 
 {% if tab == 'periods' %}
 <section class="card"><div class="section-head"><h2>Περίοδοι</h2>{% if role == 'admin' %}<a class="button" data-modal href="{{ url_for('main.period_create', building_id=building.id) }}">Νέα περίοδος</a>{% endif %}</div>
-  <div class="table-wrap"><table><thead><tr><th>Έκδοση</th><th>No</th><th>Σχόλια</th><th>Κατάσταση</th><th class="numeric">Σύνολο</th></tr></thead><tbody>
+  <div class="table-wrap"><table class="row-link"><thead><tr><th>Έκδοση</th><th>No</th><th>Σχόλια</th><th>Κατάσταση</th><th class="numeric">Σύνολο</th></tr></thead><tbody>
     {% for period in periods %}<tr><td><a href="{{ url_for('main.period_detail', period_id=period.id) }}">{{ period.issue_date.strftime('%d/%m/%Y') }}</a></td><td>{{ period.number }}</td><td>{{ period.comments }}</td><td><span class="status {{ period.status }}">{{ 'Οριστική' if period.status == 'finalized' else 'Πρόχειρη' }}</span></td><td class="numeric">{{ '%.2f'|format(period.total) }} €</td></tr>
     {% else %}<tr><td colspan="5">Δεν υπάρχουν περίοδοι.</td></tr>{% endfor %}
   </tbody></table></div>
@@ -126,8 +126,8 @@
         <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
         <td>{% if row.entry %}Απόδειξη είσπραξης αρ. {{ item.number }}{% else %}Απόδειξη πληρωμής αρ. {{ item.number }}{% endif %}{% if item.voided_at %} <span class="status">Ακυρωμένη: {{ item.void_reason }}</span>{% endif %}</td>
         <td>{% if row.entry %}{{ item.kind_label }} · <a href="{{ url_for('main.apartment_ledger_view', apartment_id=item.apartment_id) }}">{{ item.apartment.display_label() }}</a>{% else %}{{ item.payee }} · <a href="{{ url_for('main.period_detail', period_id=item.expense.period_id) }}">{{ item.expense.description }}</a>{% endif %}</td>
-        <td class="numeric">{% if row.delta > 0 %}{% if item.voided_at %}<s>{% endif %}{{ '%.2f'|format(row.delta) }} €{% if item.voided_at %}</s>{% endif %}{% endif %}</td>
-        <td class="numeric">{% if row.delta < 0 %}{% if item.voided_at %}<s>{% endif %}{{ '%.2f'|format(-row.delta) }} €{% if item.voided_at %}</s>{% endif %}{% endif %}</td>
+        <td class="numeric money-in">{% if row.delta > 0 %}{% if item.voided_at %}<s>{% endif %}{{ '%.2f'|format(row.delta) }} €{% if item.voided_at %}</s>{% endif %}{% endif %}</td>
+        <td class="numeric money-out">{% if row.delta < 0 %}{% if item.voided_at %}<s>{% endif %}{{ '%.2f'|format(-row.delta) }} €{% if item.voided_at %}</s>{% endif %}{% endif %}</td>
         <td class="numeric">{{ '%.2f'|format(row.balance) }} €</td>
         <td class="numeric">{% if row.entry %}<a class="expense-action-badge" href="{{ url_for('main.cash_entry_receipt_pdf', entry_id=item.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% else %}<a class="expense-action-badge" href="{{ url_for('main.expense_payment_receipt_pdf', payment_id=item.id) }}" target="_blank" rel="noopener" data-hx-boost="false">PDF</a>{% if not item.voided_at %} <button type="button" class="expense-action-badge" data-open="dlg-void-payment-{{ item.id }}">Ακύρωση</button>{% endif %}{% endif %}</td>
       </tr>

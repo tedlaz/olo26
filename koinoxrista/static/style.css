@@ -2097,9 +2097,10 @@ tfoot td {
   }
 
   .topbar {
+    position: static;
     min-height: 64px;
     gap: 10px;
-    padding: 0 12px;
+    padding: 8px 12px;
   }
 
   .brand-word,
@@ -2118,7 +2119,146 @@ tfoot td {
 
   .topbar nav {
     min-width: 0;
-    gap: 2px;
+    flex: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px 2px;
+  }
+
+  .topbar .theme-form select {
+    max-width: 7.5rem;
+    font-size: 16px;
+  }
+
+  /* iOS Safari zooms into inputs under 16px on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  th,
+  td {
+    padding: 9px 10px;
+  }
+
+  td:not(.numeric) {
+    white-space: normal;
+    min-width: 6rem;
+  }
+
+  .section-head {
+    flex-wrap: wrap;
+  }
+
+  .section-head .actions > * {
+    white-space: nowrap;
+  }
+
+  .section-head + .table-wrap {
+    margin-top: 14px;
+  }
+
+  /* Tables as cards: one card per row, header text from data-label (app.js cardTables) */
+  .table-wrap:has(> table.cards) {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  table.cards,
+  table.cards :is(tr, td, th) {
+    display: block;
+  }
+
+  table.cards :is(tbody, tfoot) {
+    display: grid;
+    gap: 10px;
+  }
+
+  table.cards tfoot {
+    margin-top: 10px;
+  }
+
+  table.cards thead,
+  table.cards [data-empty] {
+    display: none;
+  }
+
+  table.cards tr,
+  table.cards tbody tr:nth-child(even),
+  table.cards tbody tr:hover {
+    overflow: hidden;
+    padding-bottom: 6px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 1px 3px rgba(15, 17, 21, 0.06);
+  }
+
+  table.cards tfoot tr {
+    padding: 6px 0;
+    border-color: var(--line-strong);
+    background: var(--row-hover);
+  }
+
+  table.cards :is(td, th) {
+    min-width: 0;
+    padding: 6px 14px;
+    border: 0;
+    background: none;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  table.cards :is(td, th):not([data-label]) {
+    text-align: left;
+  }
+
+  table.cards :is(td, th)[data-label]::before {
+    content: attr(data-label);
+    float: left;
+    margin: 2px 12px 0 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* first cell = card header */
+  table.cards tbody tr > :first-child {
+    margin-bottom: 4px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-strong);
+    background: var(--surface-soft);
+    font-weight: 700;
+  }
+
+  table.cards tfoot tr > :first-child {
+    font-weight: 700;
+  }
+
+  /* unlabeled trailing cell = action buttons */
+  table.cards tbody tr > :not([data-label]):not(:first-child) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 10px 14px 4px;
+    border-top: 1px dashed var(--line);
+  }
+
+  table.cards .expense-action-badge:not(.icon-badge) {
+    padding: 7px 14px;
+  }
+
+  table.cards :is(.money-in, .money-out):not([data-empty]) {
+    font-weight: 700;
   }
 
   .nav-link {
@@ -2660,13 +2800,13 @@ dialog.modal .stack > .span-2 {
 }
 
 /* Bright accents need dark text on filled buttons in dark themes. */
-[data-theme="dark"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="dark"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button):not(.expense-action-badge),
 [data-theme="dark"] .button:not(.secondary),
-[data-theme="midnight"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="midnight"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button):not(.expense-action-badge),
 [data-theme="midnight"] .button:not(.secondary),
-[data-theme="forest"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="forest"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button):not(.expense-action-badge),
 [data-theme="forest"] .button:not(.secondary),
-[data-theme="hnd"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button),
+[data-theme="hnd"] button:not(.secondary):not(.link-button):not(.modal-close):not(.logout-button):not(.expense-action-badge),
 [data-theme="hnd"] .button:not(.secondary) {
   color: #0b0d10;
 }
@@ -3225,4 +3365,25 @@ button.row-remove:hover {
   font-size: 0.68rem;
   font-weight: 600;
   line-height: 1.5;
+}
+
+/* Whole row clicks through to its first link (stretched link) */
+table.row-link tbody tr {
+  position: relative;
+  cursor: pointer;
+}
+
+table.row-link tbody tr td:first-child a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* Cash book amounts */
+.money-in {
+  color: var(--success);
+}
+
+.money-out {
+  color: var(--danger);
 }
